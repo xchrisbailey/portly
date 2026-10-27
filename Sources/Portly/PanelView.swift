@@ -62,13 +62,13 @@ struct RowView: View {
                             .foregroundStyle(.orange)
                     }
                 }
-                Text(row.subtitle)
+                Text(RowFormat.subtitle(row))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                if let warning = row.siblingWarning {
+                if let warning = RowFormat.siblingWarning(row) {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
-                if let reason = row.killBlockedReason {
+                if let reason = RowFormat.killBlockedReason(row) {
                     Text(reason).font(.caption).foregroundStyle(.secondary)
                 }
                 if let error {
@@ -81,8 +81,8 @@ struct RowView: View {
             } else {
                 Button(action: onKill) { Image(systemName: "xmark") }
                     .buttonStyle(.plain)
-                    .disabled(row.killBlockedReason != nil)
-                    .help(row.killBlockedReason ?? "Kill")
+                    .disabled(RowFormat.killBlockedReason(row) != nil)
+                    .help(RowFormat.killBlockedReason(row) ?? "Kill")
             }
         }
         .padding(.horizontal, 12)
@@ -95,11 +95,11 @@ struct RowView: View {
             Button("Copy URL") { copy(url) }
             Button("Copy PID") { copy(String(row.pid)) }
             Button("Reveal in Finder") {
-                if let directory = row.projectDirectory ?? row.workingDirectory {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: directory))
+                if let project = row.project {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: project.directory))
                 }
             }
-            .disabled(row.projectDirectory == nil && row.workingDirectory == nil)
+            .disabled(row.project == nil)
         }
     }
 

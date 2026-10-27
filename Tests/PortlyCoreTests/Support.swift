@@ -6,10 +6,14 @@ struct FakeProcessSource: ProcessSource {
     var lsof: String
     var commandLines: [Int32: String] = [:]
     var workingDirectories: [Int32: String] = [:]
+    var executablePaths: [Int32: String] = [:]
 
     func listeningSockets() throws -> String { lsof }
     func workingDirectories(for pids: [Int32]) throws -> [Int32: String] {
         workingDirectories.filter { pids.contains($0.key) }
+    }
+    func executablePaths(for pids: [Int32]) throws -> [Int32: String] {
+        executablePaths.filter { pids.contains($0.key) }
     }
     func commandLines(for pids: [Int32]) throws -> [Int32: String] {
         commandLines.filter { pids.contains($0.key) }
@@ -34,4 +38,14 @@ struct FakeFileLookup: FileLookup {
             if dir.isEmpty { dir = "/" }
         }
     }
+}
+
+/// Builds a Row for Kill tests; only what a test cares about needs naming.
+func makeRow(
+    pid: Int32 = 100, processGroup: Int32 = 90, runtime: Runtime? = .node, command: String = "vite",
+    executablePath: String? = nil
+) -> Row {
+    Row(
+        pid: pid, processGroup: processGroup, ports: [3000], runtime: runtime, command: command,
+        commandLine: command, executablePath: executablePath, exposed: false, project: nil, siblingPorts: [])
 }

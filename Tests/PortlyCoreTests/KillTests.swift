@@ -39,7 +39,7 @@ final class SleepRecorder: @unchecked Sendable {
 }
 
 @Suite struct KillTests {
-    let row = Row(pid: 100, processGroup: 90, ports: [3000], runtime: .node, command: "vite", commandLine: "node vite")
+    let row = makeRow()
 
     func kill(_ signaller: FakeSignaller, row: Row? = nil, sleeper: SleepRecorder = SleepRecorder()) async -> KillOutcome {
         let portly = Portly(
@@ -97,7 +97,7 @@ final class SleepRecorder: @unchecked Sendable {
     }
 
     @Test func nonDevServerListenerIsSignalledByPidOnlyWithSameEscalation() async {
-        let listener = Row(pid: 200, processGroup: 190, ports: [5432], runtime: nil, command: "postgres", commandLine: "/opt/homebrew/bin/postgres")
+        let listener = makeRow(pid: 200, processGroup: 190, runtime: nil, command: "postgres")
         let s = FakeSignaller()
         s.aliveAnswers = [true]
         #expect(await kill(s, row: listener) == .requiredKill)
@@ -105,10 +105,18 @@ final class SleepRecorder: @unchecked Sendable {
         #expect(signals == [.signal(.term, .process(200)), .signal(.kill, .process(200))])
     }
 
-    @Test func systemBinaryIsRefusedWithoutSignalling() async {
-        let system = Row(pid: 300, processGroup: 300, ports: [7000], runtime: nil, command: "ControlCenter", commandLine: "/System/x", isSystemBinary: true)
+    @Test(arguments: ["/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter", "/usr/libexec/rapportd"])
+    func systemBinaryIsRefusedWithoutSignalling(path: String) async {
+        let system = makeRow(pid: 300, processGroup: 300, runtime: nil, command: "ControlCenter", executablePath: path)
         let s = FakeSignaller()
         #expect(await kill(s, row: system) == .blockedSystemBinary)
         #expect(s.calls.isEmpty)
+    }
+
+    @Test(arguments: ["/usr/local/bin/node", "/opt/homebrew/bin/node", "/Users/chris/.bun/bin/bun"])
+    func devServersFromNonSystemPathsAreKilled(path: String) async {
+        let s = FakeSignaller()
+        #expect(await kill(s, row: makeRow(executablePath: path)) == .exitedAfterTerm)
+        #expect(s.calls.first == .signal(.term, .group(90)))
     }
 }

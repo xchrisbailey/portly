@@ -15,9 +15,14 @@ import PortlyCore
         943: "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
         1395: "/opt/homebrew/opt/postgresql@16/bin/postgres -D /opt/homebrew/var/postgresql@16",
     ]
+    let executablePaths: [Int32: String] = [
+        865: "/usr/libexec/rapportd",
+        943: "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+        1395: "/opt/homebrew/opt/postgresql@16/bin/postgres",
+    ]
 
     func scanAll() throws -> [Row] {
-        let source = FakeProcessSource(lsof: try fixture("lsof-mixed"), commandLines: commandLines)
+        let source = FakeProcessSource(lsof: try fixture("lsof-mixed"), commandLines: commandLines, executablePaths: executablePaths)
         return try Portly(processSource: source, signaller: FakeSignaller()).scan(showAll: true)
     }
 
@@ -36,16 +41,17 @@ import PortlyCore
         #expect(try scan().allSatisfy(\.isDevServer))
     }
 
-    @Test func systemBinariesAreMarkedNotKillable() throws {
+    @Test func killRefusesSystemBinariesFoundByScanButNotOtherListeners() async throws {
         let rows = try scanAll()
-        #expect(try #require(rows.first { $0.pid == 943 }).killBlockedReason != nil)
-        #expect(try #require(rows.first { $0.pid == 865 }).isSystemBinary)
-        #expect(try #require(rows.first { $0.pid == 1395 }).killBlockedReason == nil)
-        #expect(try #require(rows.first { $0.pid == 94566 }).killBlockedReason == nil)
+        for (pid, outcome) in [(943, KillOutcome.blockedSystemBinary), (865, .blockedSystemBinary), (1395, .exitedAfterTerm)] {
+            let signaller = FakeSignaller()
+            let portly = Portly(processSource: FakeProcessSource(lsof: ""), signaller: signaller)
+            #expect(await portly.kill(try #require(rows.first { $0.pid == pid })) == outcome)
+        }
     }
 
     func scan(lsof: String? = nil) throws -> [Row] {
-        let source = FakeProcessSource(lsof: try lsof ?? fixture("lsof-mixed"), commandLines: commandLines)
+        let source = FakeProcessSource(lsof: try lsof ?? fixture("lsof-mixed"), commandLines: commandLines, executablePaths: executablePaths)
         return try Portly(processSource: source, signaller: FakeSignaller()).scan()
     }
 
@@ -130,7 +136,7 @@ import PortlyCore
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
             commandLines: [10: "node /app/srv.js"],
             workingDirectories: [10: "/work/app"])
-        #expect(try Portly(processSource: source, signaller: FakeSignaller()).scan().map(\.workingDirectory) == ["/work/app"])
+        #expect(try Portly(processSource: source, signaller: FakeSignaller()).scan().map(\.project?.workingDirectory) == ["/work/app"])
     }
 
     // MARK: Project naming
@@ -149,29 +155,27 @@ import PortlyCore
             cwd: "/work/mono/apps/web/src",
             packages: ["/work/mono": "mono", "/work/mono/apps/web": "web"],
             commandLine: "node /x/vite")
-        #expect(rows[0].project == "web")
-        #expect(rows[0].subtitle == "web · vite")
+        #expect(rows[0].project?.name == "web")
     }
 
     @Test func removesNpmScope() throws {
         let rows = try projectRows(cwd: "/work/web", packages: ["/work/web": "@acme/web"])
-        #expect(rows[0].project == "web")
+        #expect(rows[0].project?.name == "web")
     }
 
     @Test func fallsBackToFolderNameWithoutPackageJson() throws {
         let rows = try projectRows(cwd: "/work/my-app", packages: [:])
-        #expect(rows[0].project == "my-app")
+        #expect(rows[0].project?.name == "my-app")
     }
 
     @Test func showsRuntimeAndScriptWhenWorkingDirectoryIsRoot() throws {
         let rows = try projectRows(cwd: "/", packages: [:])
-        #expect(rows[0].project == nil)
-        #expect(rows[0].subtitle == "node server.js")
+        #expect(rows[0].project == Project(workingDirectory: "/", name: nil, directory: "/"))
     }
 
     @Test func showsRuntimeAndScriptWhenWorkingDirectoryIsHome() throws {
         let rows = try projectRows(cwd: "/Users/chris", packages: [:])
-        #expect(rows[0].subtitle == "node server.js")
+        #expect(rows[0].project?.name == nil)
     }
 
     @Test func showsRuntimeAndScriptWhenWorkingDirectoryUnknown() throws {
@@ -179,23 +183,18 @@ import PortlyCore
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
             commandLines: [10: "node /x/server.js"])
         let rows = try Portly(processSource: source, signaller: FakeSignaller(), fileLookup: FakeFileLookup()).scan()
-        #expect(rows[0].subtitle == "node server.js")
-    }
-
-    @Test func rowTitleListsPortsThenProjectThenCommand() throws {
-        let rows = try projectRows(cwd: "/work/web", packages: ["/work/web": "@acme/web"], commandLine: "node /x/vite")
-        #expect(rows[0].title == "3000, 24678 · web · vite")
+        #expect(rows[0].project == nil)
     }
 
     @Test func projectDirectoryIsWhereThePackageJsonThatNamedTheProjectLives() throws {
         let rows = try projectRows(cwd: "/work/mono/apps/web/src", packages: ["/work/mono/apps/web": "web"])
-        #expect(rows[0].projectDirectory == "/work/mono/apps/web")
-        #expect(rows[0].workingDirectory == "/work/mono/apps/web/src")
+        #expect(rows[0].project?.directory == "/work/mono/apps/web")
+        #expect(rows[0].project?.workingDirectory == "/work/mono/apps/web/src")
     }
 
     @Test func projectDirectoryFallsBackToWorkingDirectory() throws {
         let rows = try projectRows(cwd: "/work/my-app", packages: [:])
-        #expect(rows[0].projectDirectory == "/work/my-app")
+        #expect(rows[0].project?.directory == "/work/my-app")
     }
 }
 
@@ -212,12 +211,11 @@ import PortlyCore
     @Test func reportsPortsOfOtherDevServersInTheSameProcessGroup() throws {
         let rows = try scan([(10, 5, "node", 3000), (11, 5, "bun", 4000), (12, 5, "node", 5000)])
         #expect(rows.map(\.siblingPorts) == [[4000, 5000], [3000, 5000], [3000, 4000]])
-        #expect(rows[0].siblingWarning == "also kills :4000, :5000")
     }
 
     @Test func rowsWithoutSiblingsHaveNoWarning() throws {
         let rows = try scan([(10, 5, "node", 3000), (11, 6, "node", 4000)])
-        #expect(rows.allSatisfy { $0.siblingPorts.isEmpty && $0.siblingWarning == nil })
+        #expect(rows.allSatisfy { $0.siblingPorts.isEmpty })
     }
 
     @Test func nonDevServerListenersInTheGroupAreNotSiblings() throws {
