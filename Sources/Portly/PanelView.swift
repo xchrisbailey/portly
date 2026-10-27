@@ -32,12 +32,10 @@ struct PanelView: View {
                 .padding(12)
         }
         .frame(width: 320)
-        .task { await model.refresh() }
-        // The window style keeps its content alive between openings, so rescan whenever
-        // the panel window becomes key rather than relying on view appearance alone.
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            Task { await model.refresh() }
-        }
+        // The first opening builds the view after the window is already key, so scan on
+        // appear too; refreshOnOpen joins a scan that is already running.
+        .onAppear { model.refreshOnOpen() }
+        .onPanelOpen { model.refreshOnOpen() }
     }
 }
 
@@ -48,41 +46,44 @@ struct RowView: View {
     let onKill: () -> Void
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack {
-                    Text(row.ports.map(String.init).joined(separator: ", "))
-                        .font(.system(.body, design: .monospaced).weight(.semibold))
-                    if row.exposed {
-                        Text("Exposed")
-                            .font(.caption2.weight(.semibold))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.25), in: Capsule())
-                            .foregroundStyle(.orange)
-                    }
-                }
-                Text(RowFormat.subtitle(row))
-                    .font(.caption)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                // One line: `3000, 24678 · web · vite`, then badges, then the kill button.
+                Text(row.ports.map(String.init).joined(separator: ", "))
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text("· \(RowFormat.subtitle(row))")
                     .foregroundStyle(.secondary)
-                if let warning = RowFormat.siblingWarning(row) {
-                    Text(warning).font(.caption).foregroundStyle(.orange)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if row.exposed {
+                    Text("Exposed")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.25), in: Capsule())
+                        .foregroundStyle(.orange)
+                        .layoutPriority(1)
                 }
-                if let reason = RowFormat.killBlockedReason(row) {
-                    Text(reason).font(.caption).foregroundStyle(.secondary)
-                }
-                if let error {
-                    Text(error).font(.caption).foregroundStyle(.red)
+                Spacer(minLength: 0)
+                if isKilling {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button(action: onKill) { Image(systemName: "xmark") }
+                        .buttonStyle(.plain)
+                        .disabled(RowFormat.killBlockedReason(row) != nil)
+                        .help(RowFormat.killBlockedReason(row) ?? "Kill")
                 }
             }
-            Spacer()
-            if isKilling {
-                ProgressView().controlSize(.small)
-            } else {
-                Button(action: onKill) { Image(systemName: "xmark") }
-                    .buttonStyle(.plain)
-                    .disabled(RowFormat.killBlockedReason(row) != nil)
-                    .help(RowFormat.killBlockedReason(row) ?? "Kill")
+            if let warning = RowFormat.siblingWarning(row) {
+                Text(warning).font(.caption).foregroundStyle(.orange)
+            }
+            if let reason = RowFormat.killBlockedReason(row) {
+                Text(reason).font(.caption).foregroundStyle(.secondary)
+            }
+            if let error {
+                Text(error).font(.caption).foregroundStyle(.red)
             }
         }
         .padding(.horizontal, 12)
