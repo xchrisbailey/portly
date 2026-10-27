@@ -15,6 +15,8 @@ public struct Row: Sendable, Equatable, Identifiable {
     /// Short command such as `vite` or `next dev`.
     public let command: String
     public let commandLine: String
+    /// Login name of the user running the process, as lsof reports it.
+    public let owner: String?
     /// Real path of the process's executable, when the OS would tell us. Kill policy reads it.
     public let executablePath: String?
     /// True when any port is bound to all interfaces (Exposed).
@@ -31,7 +33,7 @@ public struct Row: Sendable, Equatable, Identifiable {
 
     public init(
         pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime?, command: String, commandLine: String,
-        executablePath: String?, exposed: Bool, project: Project?, siblingPorts: [Int]
+        owner: String?, executablePath: String?, exposed: Bool, project: Project?, siblingPorts: [Int]
     ) {
         self.pid = pid
         self.processGroup = processGroup
@@ -39,6 +41,7 @@ public struct Row: Sendable, Equatable, Identifiable {
         self.runtime = runtime
         self.command = command
         self.commandLine = commandLine
+        self.owner = owner
         self.executablePath = executablePath
         self.exposed = exposed
         self.project = project

@@ -3,6 +3,7 @@ private struct ListeningProcess {
     let pid: Int32
     let processGroup: Int32
     let executable: String
+    let owner: String?
     let runtime: Runtime?
     /// Deduplicated across IPv4/IPv6 and ascending.
     let ports: [Int]
@@ -13,6 +14,7 @@ private struct ListeningProcess {
         pid = first.pid
         processGroup = first.processGroup
         executable = first.executable
+        owner = first.owner
         runtime = Runtime(rawValue: first.executable)
         ports = Set(sockets.map(\.port)).sorted()
         exposed = sockets.contains { $0.binding == .allInterfaces }
@@ -49,6 +51,7 @@ extension Portly {
                 command: process.runtime.map { ShortCommand.make(runtime: $0, commandLine: commandLine) }
                     ?? process.executable,
                 commandLine: commandLine,
+                owner: process.owner,
                 executablePath: executablePaths[process.pid],
                 exposed: process.exposed,
                 project: workingDirectories[process.pid].map(projectNaming.project(workingDirectory:)),

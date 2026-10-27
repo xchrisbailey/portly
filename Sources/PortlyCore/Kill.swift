@@ -8,8 +8,10 @@ public enum KillPolicy {
     }
 
     /// Dev Servers are signalled as a group (ADR 0001); other Listeners by PID only.
-    static func target(for row: Row) -> SignalTarget {
-        row.isDevServer ? .group(row.processGroup) : .process(row.pid)
+    /// Groups 0 and 1, and Portly's own group, are never signalled; the PID is signalled instead.
+    static func target(for row: Row, ownProcessGroup: Int32) -> SignalTarget {
+        let usable = row.processGroup > 1 && row.processGroup != ownProcessGroup
+        return row.isDevServer && usable ? .group(row.processGroup) : .process(row.pid)
     }
 }
 
@@ -19,31 +21,33 @@ extension Portly {
     /// Listeners that aren't Dev Servers are signalled by PID only, and system binaries are refused.
     public func kill(_ row: Row) async -> KillOutcome {
         if KillPolicy.isBlocked(row) { return .blockedSystemBinary }
-        let target = KillPolicy.target(for: row)
-        if let outcome = send(.term, to: target, gone: .alreadyGone) { return outcome }
+        let target = KillPolicy.target(for: row, ownProcessGroup: ownProcessGroup)
+        if let outcome = send(.term, to: target, row: row, gone: .alreadyGone) { return outcome }
 
         // Poll so a prompt exit doesn't hold the spinner for the full delay.
         let steps = 20
         let interval = escalationDelay / steps
         for _ in 0..<steps {
-            if !signaller.isAlive(row.pid) { return .exitedAfterTerm }
+            if !signaller.isAlive(target) { return .exitedAfterTerm }
             try? await sleep(interval)
         }
-        if !signaller.isAlive(row.pid) { return .exitedAfterTerm }
+        if !signaller.isAlive(target) { return .exitedAfterTerm }
 
-        return send(.kill, to: target, gone: .exitedAfterTerm) ?? .requiredKill
+        return send(.kill, to: target, row: row, gone: .exitedAfterTerm) ?? .requiredKill
     }
 
     /// Sends a signal; returns the outcome that ends the Kill when it fails, nil on success.
     /// `gone` is the outcome when the target no longer exists.
-    private func send(_ signal: Signal, to target: SignalTarget, gone: KillOutcome) -> KillOutcome? {
+    private func send(_ signal: Signal, to target: SignalTarget, row: Row, gone: KillOutcome) -> KillOutcome? {
         do {
             try signaller.send(signal, to: target)
             return nil
-        } catch SignalError.noSuchProcess {
-            return gone
         } catch {
-            return .notPermitted
+            switch error {
+            case .noSuchProcess: return gone
+            case .notPermitted: return .notPermitted(owner: row.owner)
+            case .failed(let code): return .failed(errno: code)
+            }
         }
     }
 }

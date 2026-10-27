@@ -1,3 +1,4 @@
+import Foundation
 import PortlyCore
 
 /// All user-facing wording for a Row. The core exposes data; this decides how to say it.
@@ -17,5 +18,14 @@ enum RowFormat {
     /// Why Kill is unavailable for this row, or nil when it is allowed.
     static func killBlockedReason(_ row: Row) -> String? {
         KillPolicy.isBlocked(row) ? "macOS system process, can't kill" : nil
+    }
+
+    /// Inline text for a Kill that failed, or nil when the row simply goes away.
+    static func failureText(_ outcome: KillOutcome) -> String? {
+        switch outcome {
+        case .notPermitted(let owner): "Owned by \(owner ?? "another user"), can't kill"
+        case .failed(let code): "Kill failed: \(String(cString: strerror(code)))"
+        case .exitedAfterTerm, .requiredKill, .alreadyGone, .blockedSystemBinary: nil
+        }
     }
 }

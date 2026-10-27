@@ -6,7 +6,7 @@ import PortlyCore
 final class FakeSignaller: Signaller, @unchecked Sendable {
     enum Call: Equatable {
         case signal(Signal, SignalTarget)
-        case isAlive(Int32)
+        case isAlive(SignalTarget)
     }
 
     private let lock = NSLock()
@@ -18,14 +18,14 @@ final class FakeSignaller: Signaller, @unchecked Sendable {
 
     var calls: [Call] { lock.withLock { _calls } }
 
-    func send(_ signal: Signal, to target: SignalTarget) throws {
+    func send(_ signal: Signal, to target: SignalTarget) throws(SignalError) {
         lock.withLock { _calls.append(.signal(signal, target)) }
         if let error = errors[signal] { throw error }
     }
 
-    func isAlive(_ pid: Int32) -> Bool {
+    func isAlive(_ target: SignalTarget) -> Bool {
         lock.withLock {
-            _calls.append(.isAlive(pid))
+            _calls.append(.isAlive(target))
             return aliveAnswers.count > 1 ? aliveAnswers.removeFirst() : aliveAnswers[0]
         }
     }
@@ -41,10 +41,13 @@ final class SleepRecorder: @unchecked Sendable {
 @Suite struct KillTests {
     let row = makeRow()
 
-    func kill(_ signaller: FakeSignaller, row: Row? = nil, sleeper: SleepRecorder = SleepRecorder()) async -> KillOutcome {
+    func kill(
+        _ signaller: FakeSignaller, row: Row? = nil, sleeper: SleepRecorder = SleepRecorder(), ownGroup: Int32 = 4242
+    ) async -> KillOutcome {
         let portly = Portly(
             processSource: FakeProcessSource(lsof: ""),
             signaller: signaller,
+            ownProcessGroup: ownGroup,
             escalationDelay: .seconds(2),
             sleep: { sleeper.sleep($0) })
         return await portly.kill(row ?? self.row)
@@ -71,7 +74,7 @@ final class SleepRecorder: @unchecked Sendable {
     @Test func permissionFailureOnSigtermIsReportedAndNothingElseIsSent() async {
         let s = FakeSignaller()
         s.errors[.term] = .notPermitted
-        #expect(await kill(s) == .notPermitted)
+        #expect(await kill(s) == .notPermitted(owner: "chris"))
         #expect(s.calls == [.signal(.term, .group(90))])
     }
 
@@ -79,7 +82,7 @@ final class SleepRecorder: @unchecked Sendable {
         let s = FakeSignaller()
         s.aliveAnswers = [true]
         s.errors[.kill] = .notPermitted
-        #expect(await kill(s) == .notPermitted)
+        #expect(await kill(s) == .notPermitted(owner: "chris"))
     }
 
     @Test func serverThatAlreadyExitedIsAlreadyGone() async {
@@ -118,5 +121,32 @@ final class SleepRecorder: @unchecked Sendable {
         let s = FakeSignaller()
         #expect(await kill(s, row: makeRow(executablePath: path)) == .exitedAfterTerm)
         #expect(s.calls.first == .signal(.term, .group(90)))
+    }
+
+    @Test(arguments: [Int32(0), 1, 4242])
+    func unusableGroupFallsBackToSignallingThePidOnly(group: Int32) async {
+        let s = FakeSignaller()
+        s.aliveAnswers = [true]
+        #expect(await kill(s, row: makeRow(processGroup: group)) == .requiredKill)
+        let signals = s.calls.filter { if case .signal = $0 { true } else { false } }
+        #expect(signals == [.signal(.term, .process(100)), .signal(.kill, .process(100))])
+    }
+
+    @Test func groupKillEscalatesWhileAnyProcessInTheGroupIsAlive() async {
+        let s = FakeSignaller()
+        s.aliveAnswers = [true]
+        #expect(await kill(s) == .requiredKill)
+        #expect(s.calls.contains(.isAlive(.group(90))))
+        #expect(!s.calls.contains(.isAlive(.process(100))))
+    }
+
+    @Test func otherSignalFailuresAreReportedDistinctlyNotAsPermission() async {
+        let s = FakeSignaller()
+        s.errors[.term] = .failed(22)
+        #expect(await kill(s) == .failed(errno: 22))
+        let late = FakeSignaller()
+        late.aliveAnswers = [true]
+        late.errors[.kill] = .failed(5)
+        #expect(await kill(late) == .failed(errno: 5))
     }
 }

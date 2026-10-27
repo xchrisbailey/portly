@@ -29,7 +29,7 @@ final class PanelModel {
         }
     }
 
-    /// Kills a row's Dev Server, then rescans. A not-permitted failure stays on the row.
+    /// Kills a row's Dev Server, then rescans. A failed Kill stays on the row as inline text.
     func kill(_ row: Row) async {
         guard !killing.contains(row.pid) else { return }
         killing.insert(row.pid)
@@ -37,9 +37,7 @@ final class PanelModel {
         let portly = portly
         let outcome = await portly.kill(row)
         killing.remove(row.pid)
-        if outcome == .notPermitted {
-            rowErrors[row.pid] = "Owned by root, can't kill"
-        }
+        rowErrors[row.pid] = RowFormat.failureText(outcome)
         await refresh()
     }
 }

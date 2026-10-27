@@ -6,6 +6,8 @@ struct ListeningSocket: Equatable {
     let processGroup: Int32
     /// Executable name as reported by lsof's `c` field.
     let executable: String
+    /// Login name from lsof's `L` field.
+    let owner: String?
     let binding: Binding
     let port: Int
 }
@@ -18,6 +20,7 @@ enum LsofParser {
         var pid: Int32?
         var processGroup: Int32 = 0
         var executable = ""
+        var owner: String?
         var proto = ""
 
         for line in output.split(separator: "\n") {
@@ -28,14 +31,16 @@ enum LsofParser {
                 pid = Int32(value)
                 processGroup = 0
                 executable = ""
+                owner = nil
             case "g": processGroup = Int32(value) ?? 0
             case "c": executable = String(value)
+            case "L": owner = String(value)
             case "f": proto = ""
             case "P": proto = String(value)
             case "n":
                 guard let pid, proto == "TCP", let (binding, port) = parseName(value) else { continue }
                 sockets.append(ListeningSocket(
-                    pid: pid, processGroup: processGroup, executable: executable, binding: binding, port: port))
+                    pid: pid, processGroup: processGroup, executable: executable, owner: owner, binding: binding, port: port))
             default: break
             }
         }

@@ -11,21 +11,30 @@ public enum SignalTarget: Sendable, Equatable {
 public enum SignalError: Error, Sendable, Equatable {
     case notPermitted
     case noSuchProcess
+    /// Any other errno from the signal call.
+    case failed(Int32)
 }
 
 /// The boundary between Portly's core and signal delivery. The real adapter calls
 /// `kill(2)`; tests inject a recording fake.
 public protocol Signaller: Sendable {
-    func send(_ signal: Signal, to target: SignalTarget) throws
-    func isAlive(_ pid: Int32) -> Bool
+    /// Maps ESRCH to `.noSuchProcess` and EPERM to `.notPermitted`; any other errno is `.failed`.
+    func send(_ signal: Signal, to target: SignalTarget) throws(SignalError)
+
+    /// True while any live process remains in the target: the PID itself, or any member of the
+    /// group. Zombies count as dead.
+    func isAlive(_ target: SignalTarget) -> Bool
 }
 
 /// How a Kill ended.
 public enum KillOutcome: Sendable, Equatable {
     case exitedAfterTerm
     case requiredKill
-    case notPermitted
+    /// Another user owns the process (`owner` is their login name, when known).
+    case notPermitted(owner: String?)
     case alreadyGone
+    /// The signal failed for a reason other than permission or the process being gone.
+    case failed(errno: Int32)
     /// Refused without signalling: the row is a macOS system binary.
     case blockedSystemBinary
 }

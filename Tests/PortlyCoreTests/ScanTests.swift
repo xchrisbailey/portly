@@ -36,6 +36,11 @@ import PortlyCore
         #expect(try #require(rows.first { $0.pid == 65897 }).runtime == .node)
     }
 
+    @Test func rowsCarryTheOwnerFromLsof() throws {
+        let rows = try scanAll()
+        #expect(try #require(rows.first { $0.pid == 1395 }).owner == "chris")
+    }
+
     @Test func defaultScanStillHidesNonDevServers() throws {
         #expect(try scan().count == 4)
         #expect(try scan().allSatisfy(\.isDevServer))

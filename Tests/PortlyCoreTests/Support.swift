@@ -43,9 +43,9 @@ struct FakeFileLookup: FileLookup {
 /// Builds a Row for Kill tests; only what a test cares about needs naming.
 func makeRow(
     pid: Int32 = 100, processGroup: Int32 = 90, runtime: Runtime? = .node, command: String = "vite",
-    executablePath: String? = nil
+    executablePath: String? = nil, owner: String? = "chris"
 ) -> Row {
     Row(
         pid: pid, processGroup: processGroup, ports: [3000], runtime: runtime, command: command,
-        commandLine: command, executablePath: executablePath, exposed: false, project: nil, siblingPorts: [])
+        commandLine: command, owner: owner, executablePath: executablePath, exposed: false, project: nil, siblingPorts: [])
 }
