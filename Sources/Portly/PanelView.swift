@@ -20,6 +20,7 @@ struct PanelView: View {
                     Divider()
                 }
             }
+            LaunchAtLoginToggle()
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
                 .buttonStyle(.plain)
