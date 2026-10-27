@@ -42,7 +42,7 @@ struct RowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
-                Text(row.ports.map { ":\($0)" }.joined(separator: " "))
+                Text(row.ports.map(String.init).joined(separator: ", "))
                     .font(.system(.body, design: .monospaced).weight(.semibold))
                 if row.exposed {
                     Text("Exposed")
@@ -53,7 +53,7 @@ struct RowView: View {
                         .foregroundStyle(.orange)
                 }
             }
-            Text(row.command)
+            Text(row.subtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -67,11 +67,11 @@ struct RowView: View {
             Button("Copy URL") { copy(url) }
             Button("Copy PID") { copy(String(row.pid)) }
             Button("Reveal in Finder") {
-                if let directory = row.workingDirectory {
+                if let directory = row.projectDirectory ?? row.workingDirectory {
                     NSWorkspace.shared.open(URL(fileURLWithPath: directory))
                 }
             }
-            .disabled(row.workingDirectory == nil)
+            .disabled(row.projectDirectory == nil && row.workingDirectory == nil)
         }
     }
 

@@ -101,4 +101,69 @@ import PortlyCore
             workingDirectories: [10: "/work/app"])
         #expect(try Portly(processSource: source).scan().map(\.workingDirectory) == ["/work/app"])
     }
+
+    // MARK: Project naming
+
+    func projectRows(cwd: String, packages: [String: String?], commandLine: String = "node /x/server.js") throws -> [Row] {
+        let source = FakeProcessSource(
+            lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\nf2\ntIPv6\nPTCP\nn[::1]:24678\n",
+            commandLines: [10: commandLine], workingDirectories: [10: cwd])
+        return try Portly(
+            processSource: source, fileLookup: FakeFileLookup(packages: packages),
+            homeDirectory: "/Users/chris").scan()
+    }
+
+    @Test func projectNameComesFromNearestPackageJsonAtOrAboveWorkingDirectory() throws {
+        let rows = try projectRows(
+            cwd: "/work/mono/apps/web/src",
+            packages: ["/work/mono": "mono", "/work/mono/apps/web": "web"],
+            commandLine: "node /x/vite")
+        #expect(rows[0].project == "web")
+        #expect(rows[0].subtitle == "web · vite")
+    }
+
+    @Test func removesNpmScope() throws {
+        let rows = try projectRows(cwd: "/work/web", packages: ["/work/web": "@acme/web"])
+        #expect(rows[0].project == "web")
+    }
+
+    @Test func fallsBackToFolderNameWithoutPackageJson() throws {
+        let rows = try projectRows(cwd: "/work/my-app", packages: [:])
+        #expect(rows[0].project == "my-app")
+    }
+
+    @Test func showsRuntimeAndScriptWhenWorkingDirectoryIsRoot() throws {
+        let rows = try projectRows(cwd: "/", packages: [:])
+        #expect(rows[0].project == nil)
+        #expect(rows[0].subtitle == "node server.js")
+    }
+
+    @Test func showsRuntimeAndScriptWhenWorkingDirectoryIsHome() throws {
+        let rows = try projectRows(cwd: "/Users/chris", packages: [:])
+        #expect(rows[0].subtitle == "node server.js")
+    }
+
+    @Test func showsRuntimeAndScriptWhenWorkingDirectoryUnknown() throws {
+        let source = FakeProcessSource(
+            lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
+            commandLines: [10: "node /x/server.js"])
+        let rows = try Portly(processSource: source, fileLookup: FakeFileLookup()).scan()
+        #expect(rows[0].subtitle == "node server.js")
+    }
+
+    @Test func rowTitleListsPortsThenProjectThenCommand() throws {
+        let rows = try projectRows(cwd: "/work/web", packages: ["/work/web": "@acme/web"], commandLine: "node /x/vite")
+        #expect(rows[0].title == "3000, 24678 · web · vite")
+    }
+
+    @Test func projectDirectoryIsWhereThePackageJsonThatNamedTheProjectLives() throws {
+        let rows = try projectRows(cwd: "/work/mono/apps/web/src", packages: ["/work/mono/apps/web": "web"])
+        #expect(rows[0].projectDirectory == "/work/mono/apps/web")
+        #expect(rows[0].workingDirectory == "/work/mono/apps/web/src")
+    }
+
+    @Test func projectDirectoryFallsBackToWorkingDirectory() throws {
+        let rows = try projectRows(cwd: "/work/my-app", packages: [:])
+        #expect(rows[0].projectDirectory == "/work/my-app")
+    }
 }

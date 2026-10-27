@@ -17,11 +17,29 @@ public struct Row: Sendable, Equatable, Identifiable {
     public let exposed: Bool
     /// The directory the Dev Server was started from, when it could be read.
     public let workingDirectory: String?
+    /// Project name, or nil when the working directory is unknown, `/` or the home folder.
+    public let project: String?
+    /// Directory of the package.json that named the Project, else the working directory.
+    public let projectDirectory: String?
 
     public var id: Int32 { pid }
 
-    init(pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime, command: String, commandLine: String,
-         exposed: Bool = false, workingDirectory: String? = nil) {
+    /// Second part of the row text: `web · vite`, or `node server.js` without a Project.
+    public var subtitle: String {
+        guard let project else { return "\(runtime.rawValue) \(command)" }
+        return "\(project) · \(command)"
+    }
+
+    /// Full row text, e.g. `3000, 24678 · web · vite`.
+    public var title: String {
+        "\(ports.map(String.init).joined(separator: ", ")) · \(subtitle)"
+    }
+
+    public init(
+        pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime, command: String, commandLine: String,
+        exposed: Bool = false, workingDirectory: String? = nil, project: String? = nil,
+        projectDirectory: String? = nil
+    ) {
         self.pid = pid
         self.processGroup = processGroup
         self.ports = ports
@@ -30,5 +48,7 @@ public struct Row: Sendable, Equatable, Identifiable {
         self.commandLine = commandLine
         self.exposed = exposed
         self.workingDirectory = workingDirectory
+        self.project = project
+        self.projectDirectory = projectDirectory
     }
 }

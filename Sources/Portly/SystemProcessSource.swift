@@ -8,6 +8,22 @@ struct SystemProcessSource: ProcessSource {
         try run("/usr/sbin/lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pgcLftPn"])
     }
 
+    func workingDirectories(for pids: [Int32]) throws -> [Int32: String] {
+        guard !pids.isEmpty else { return [:] }
+        let list = pids.map(String.init).joined(separator: ",")
+        let output = try run("/usr/sbin/lsof", ["-nP", "-a", "-d", "cwd", "-F", "pn", "-p", list])
+        var result: [Int32: String] = [:]
+        var pid: Int32?
+        for line in output.split(separator: "\n") {
+            switch line.first {
+            case "p": pid = Int32(line.dropFirst())
+            case "n": if let pid { result[pid] = String(line.dropFirst()) }
+            default: break
+            }
+        }
+        return result
+    }
+
     func commandLines(for pids: [Int32]) throws -> [Int32: String] {
         guard !pids.isEmpty else { return [:] }
         let list = pids.map(String.init).joined(separator: ",")
@@ -17,22 +33,6 @@ struct SystemProcessSource: ProcessSource {
             let trimmed = line.drop { $0 == " " }
             guard let space = trimmed.firstIndex(of: " "), let pid = Int32(trimmed[..<space]) else { continue }
             result[pid] = trimmed[trimmed.index(after: space)...].trimmingCharacters(in: .whitespaces)
-        }
-        return result
-    }
-
-    func workingDirectories(for pids: [Int32]) throws -> [Int32: String] {
-        guard !pids.isEmpty else { return [:] }
-        let list = pids.map(String.init).joined(separator: ",")
-        let output = try run("/usr/sbin/lsof", ["-nP", "-a", "-d", "cwd", "-p", list, "-F", "pn"])
-        var result: [Int32: String] = [:]
-        var pid: Int32?
-        for line in output.split(separator: "\n") {
-            switch line.first {
-            case "p": pid = Int32(line.dropFirst())
-            case "n": if let pid { result[pid] = String(line.dropFirst()) }
-            default: break
-            }
         }
         return result
     }
