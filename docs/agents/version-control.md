@@ -29,7 +29,7 @@ Skills written for git (`code-review`, `pr`, `no-mistakes`, `git-guardrails-clau
 | `git fetch` | `jj git fetch` |
 | `git pull --rebase` | `jj git fetch && jj rebase -d main` |
 | `git rebase main` | `jj rebase -d main` |
-| `git push` | `jj bookmark set <name> -r @-` then `jj git push -b <name>` (new bookmark: add `--allow-new`) |
+| `git push` | `jj bookmark set <name> -r @-` then `jj git push -b <name>` (works for new bookmarks too) |
 | `git stash` | not needed: `jj new` leaves the current work in its own commit |
 | `git reset --hard` / undo | `jj undo`, or `jj op log` + `jj op restore <op>` |
 | `git merge-base A B` | revset `fork_point(A \| B)` |
@@ -52,8 +52,10 @@ Push a bookmark, then open the PR with `gh`:
 
 ```sh
 jj bookmark create <name> -r @-
-jj git push -b <name> --allow-new
+jj git push -b <name>
 gh pr create --head <name> --base main --title "..." --body "..."
 ```
+
+Don't pass `--allow-new`: jj 0.46 removed it, and the user's config (`remotes.origin.auto-track-bookmarks = "glob:*"`) already tracks new bookmarks on push.
 
 To update a PR, amend the commits (edit in place or `jj squash`), then `jj git push -b <name>`. jj force-pushes rewritten bookmarks safely.
