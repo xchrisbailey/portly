@@ -1,5 +1,5 @@
-import Testing
 import PortlyCore
+import Testing
 
 @Suite struct ScanTests {
     // Real `lsof -nP -iTCP -sTCP:LISTEN -F pgcLftPn` output captured on a machine running
@@ -22,7 +22,8 @@ import PortlyCore
     ]
 
     func scanAll() throws -> [Row] {
-        let source = FakeProcessSource(lsof: try fixture("lsof-mixed"), commandLines: commandLines, executablePaths: executablePaths)
+        let source = FakeProcessSource(
+            lsof: try fixture("lsof-mixed"), commandLines: commandLines, executablePaths: executablePaths)
         return try Portly(processSource: source, signaller: FakeSignaller()).scan(showAll: true)
     }
 
@@ -48,7 +49,9 @@ import PortlyCore
 
     @Test func killRefusesSystemBinariesFoundByScanButNotOtherListeners() async throws {
         let rows = try scanAll()
-        for (pid, outcome) in [(943, KillOutcome.blockedSystemBinary), (865, .blockedSystemBinary), (1395, .exitedAfterTerm)] {
+        for (pid, outcome) in [
+            (943, KillOutcome.blockedSystemBinary), (865, .blockedSystemBinary), (1395, .exitedAfterTerm),
+        ] {
             let signaller = FakeSignaller()
             let portly = Portly(processSource: FakeProcessSource(lsof: ""), signaller: signaller)
             #expect(await portly.kill(try #require(rows.first { $0.pid == pid })) == outcome)
@@ -56,7 +59,8 @@ import PortlyCore
     }
 
     func scan(lsof: String? = nil) throws -> [Row] {
-        let source = FakeProcessSource(lsof: try lsof ?? fixture("lsof-mixed"), commandLines: commandLines, executablePaths: executablePaths)
+        let source = FakeProcessSource(
+            lsof: try lsof ?? fixture("lsof-mixed"), commandLines: commandLines, executablePaths: executablePaths)
         return try Portly(processSource: source, signaller: FakeSignaller()).scan()
     }
 
@@ -90,27 +94,27 @@ import PortlyCore
 
     @Test func ignoresUDPOutboundAndNonLocalBindings() throws {
         let lsof = """
-        p10
-        g10
-        cnode
-        f1
-        tIPv4
-        PUDP
-        n*:5353
-        f2
-        tIPv4
-        PTCP
-        n127.0.0.1:50000->127.0.0.1:5432
-        f3
-        tIPv4
-        PTCP
-        n192.168.1.5:8080
-        f4
-        tIPv4
-        PTCP
-        n127.0.0.1:3000
+            p10
+            g10
+            cnode
+            f1
+            tIPv4
+            PUDP
+            n*:5353
+            f2
+            tIPv4
+            PTCP
+            n127.0.0.1:50000->127.0.0.1:5432
+            f3
+            tIPv4
+            PTCP
+            n192.168.1.5:8080
+            f4
+            tIPv4
+            PTCP
+            n127.0.0.1:3000
 
-        """
+            """
         let rows = try scan(lsof: lsof)
         #expect(rows.map(\.ports) == [[3000]])
     }
@@ -141,18 +145,24 @@ import PortlyCore
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
             commandLines: [10: "node /app/srv.js"],
             workingDirectories: [10: "/work/app"])
-        #expect(try Portly(processSource: source, signaller: FakeSignaller()).scan().map(\.project?.workingDirectory) == ["/work/app"])
+        #expect(
+            try Portly(processSource: source, signaller: FakeSignaller()).scan().map(\.project?.workingDirectory) == [
+                "/work/app"
+            ])
     }
 
     // MARK: Project naming
 
-    func projectRows(cwd: String, packages: [String: String?], commandLine: String = "node /x/server.js") throws -> [Row] {
+    func projectRows(cwd: String, packages: [String: String?], commandLine: String = "node /x/server.js") throws
+        -> [Row]
+    {
         let source = FakeProcessSource(
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\nf2\ntIPv6\nPTCP\nn[::1]:24678\n",
             commandLines: [10: commandLine], workingDirectories: [10: cwd])
         return try Portly(
             processSource: source, signaller: FakeSignaller(), fileLookup: FakeFileLookup(packages: packages),
-            homeDirectory: "/Users/chris").scan()
+            homeDirectory: "/Users/chris"
+        ).scan()
     }
 
     @Test func projectNameComesFromNearestPackageJsonAtOrAboveWorkingDirectory() throws {

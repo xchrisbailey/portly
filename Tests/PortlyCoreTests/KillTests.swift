@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 import PortlyCore
+import Testing
 
 /// Records every call and replays scripted behaviour.
 final class FakeSignaller: Signaller, @unchecked Sendable {
@@ -108,7 +108,9 @@ final class SleepRecorder: @unchecked Sendable {
         #expect(signals == [.signal(.term, .process(200)), .signal(.kill, .process(200))])
     }
 
-    @Test(arguments: ["/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter", "/usr/libexec/rapportd"])
+    @Test(arguments: [
+        "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter", "/usr/libexec/rapportd",
+    ])
     func systemBinaryIsRefusedWithoutSignalling(path: String) async {
         let system = makeRow(pid: 300, processGroup: 300, runtime: nil, command: "ControlCenter", executablePath: path)
         let s = FakeSignaller()

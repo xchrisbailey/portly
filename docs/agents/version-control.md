@@ -44,6 +44,9 @@ Skills written for git (`code-review`, `pr`, `no-mistakes`, `git-guardrails-clau
 - Check `jj st` before committing; it lists exactly what the snapshot contains.
 - Conflicts don't stop jj; they're recorded in the commit. Check `jj log` for conflict markers after a rebase and resolve by editing the files.
 - `jj undo` reverses the last operation. Prefer it over hand-repairing history.
+- jj auto-tracks every new file. If `jj st` lists build output (`.build/`, `build/`), the working copy is missing `.gitignore`: run `jj file untrack .build build` before committing.
+- A workspace goes **stale** when its commit is rewritten from another workspace (a rebase or merge done elsewhere). Run `jj workspace update-stale` in it before building or testing there.
+- jj runs no git hooks. Checks run through `scripts/check.sh`; see `AGENTS.md`.
 - Commit or push only when the user asks, same as with git.
 
 ## Pull requests

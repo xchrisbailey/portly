@@ -40,7 +40,8 @@ extension Portly {
             grouping: processes.filter { $0.runtime != nil && $0.processGroup != 0 }, by: \.processGroup)
 
         return processes.map { process in
-            let siblingPorts = devServersByGroup[process.processGroup]?
+            let siblingPorts =
+                devServersByGroup[process.processGroup]?
                 .filter { $0.pid != process.pid }.flatMap(\.ports) ?? []
             let commandLine = commandLines[process.pid] ?? process.executable
             return Row(

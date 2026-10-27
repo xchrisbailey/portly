@@ -8,21 +8,24 @@ struct LaunchAtLoginToggle: View {
     private static var systemEnabled: Bool { SMAppService.mainApp.status == .enabled }
 
     var body: some View {
-        Toggle("Launch at login", isOn: Binding(
-            get: { enabled },
-            set: { newValue in
-                do {
-                    if newValue {
-                        try SMAppService.mainApp.register()
-                    } else {
-                        try SMAppService.mainApp.unregister()
+        Toggle(
+            "Launch at login",
+            isOn: Binding(
+                get: { enabled },
+                set: { newValue in
+                    do {
+                        if newValue {
+                            try SMAppService.mainApp.register()
+                        } else {
+                            try SMAppService.mainApp.unregister()
+                        }
+                    } catch {
+                        NSLog("Portly: login item change failed: \(error)")
                     }
-                } catch {
-                    NSLog("Portly: login item change failed: \(error)")
+                    enabled = Self.systemEnabled
                 }
-                enabled = Self.systemEnabled
-            }
-        ))
+            )
+        )
         .toggleStyle(.checkbox)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

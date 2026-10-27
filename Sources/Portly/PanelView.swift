@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import PortlyCore
+import SwiftUI
 
 struct PanelView: View {
     @State var model: PanelModel

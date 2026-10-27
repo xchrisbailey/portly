@@ -39,8 +39,10 @@ enum LsofParser {
             case "P": proto = String(value)
             case "n":
                 guard let pid, proto == "TCP", let (binding, port) = parseName(value) else { continue }
-                sockets.append(ListeningSocket(
-                    pid: pid, processGroup: processGroup, executable: executable, owner: owner, binding: binding, port: port))
+                sockets.append(
+                    ListeningSocket(
+                        pid: pid, processGroup: processGroup, executable: executable, owner: owner, binding: binding,
+                        port: port))
             default: break
             }
         }
@@ -49,7 +51,8 @@ enum LsofParser {
 
     private static func parseName(_ name: Substring) -> (ListeningSocket.Binding, Int)? {
         guard !name.contains("->"), let colon = name.lastIndex(of: ":"),
-              let port = Int(name[name.index(after: colon)...]) else { return nil }
+            let port = Int(name[name.index(after: colon)...])
+        else { return nil }
         switch name[..<colon] {
         case "*", "0.0.0.0", "[::]": return (.allInterfaces, port)
         case "127.0.0.1", "[::1]": return (.loopback, port)

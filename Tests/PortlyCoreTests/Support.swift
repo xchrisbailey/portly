@@ -1,6 +1,6 @@
-import Testing
 import Foundation
 import PortlyCore
+import Testing
 
 struct FakeProcessSource: ProcessSource {
     var lsof: String
@@ -47,5 +47,6 @@ func makeRow(
 ) -> Row {
     Row(
         pid: pid, processGroup: processGroup, ports: [3000], runtime: runtime, command: command,
-        commandLine: command, owner: owner, executablePath: executablePath, exposed: false, project: nil, siblingPorts: [])
+        commandLine: command, owner: owner, executablePath: executablePath, exposed: false, project: nil,
+        siblingPorts: [])
 }
