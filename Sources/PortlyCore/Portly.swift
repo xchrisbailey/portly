@@ -3,18 +3,60 @@ import Foundation
 /// Core entry point. All OS access goes through the injected `ProcessSource`.
 public struct Portly: Sendable {
     private let processSource: any ProcessSource
+    private let signaller: any Signaller
+    private let escalationDelay: Duration
+    private let sleep: @Sendable (Duration) async throws -> Void
 
     private let fileLookup: any FileLookup
     private let homeDirectory: String
 
+    /// `escalationDelay` is how long a Kill waits after SIGTERM before sending SIGKILL;
+    /// `sleep` is injectable so tests don't wait.
     public init(
         processSource: any ProcessSource,
+        signaller: any Signaller,
         fileLookup: any FileLookup = DiskFileLookup(),
-        homeDirectory: String = NSHomeDirectory()
+        homeDirectory: String = NSHomeDirectory(),
+        escalationDelay: Duration = .seconds(2),
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.processSource = processSource
         self.fileLookup = fileLookup
         self.homeDirectory = homeDirectory
+        self.signaller = signaller
+        self.escalationDelay = escalationDelay
+        self.sleep = sleep
+    }
+
+    /// Kills a Dev Server and its whole process group (ADR 0001): SIGTERM, then SIGKILL
+    /// if the server is still alive after the escalation delay.
+    public func kill(_ row: Row) async -> KillOutcome {
+        let group = SignalTarget.group(row.processGroup)
+        do {
+            try signaller.send(.term, to: group)
+        } catch SignalError.noSuchProcess {
+            return .alreadyGone
+        } catch {
+            return .notPermitted
+        }
+
+        // Poll so a prompt exit doesn't hold the spinner for the full delay.
+        let steps = 20
+        let interval = escalationDelay / steps
+        for _ in 0..<steps {
+            if !signaller.isAlive(row.pid) { return .exitedAfterTerm }
+            try? await sleep(interval)
+        }
+        if !signaller.isAlive(row.pid) { return .exitedAfterTerm }
+
+        do {
+            try signaller.send(.kill, to: group)
+        } catch SignalError.noSuchProcess {
+            return .exitedAfterTerm
+        } catch {
+            return .notPermitted
+        }
+        return .requiredKill
     }
 
     /// Scans for Dev Servers and returns one row per server, sorted by lowest port.

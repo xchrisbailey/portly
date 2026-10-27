@@ -15,7 +15,7 @@ import PortlyCore
 
     func scan(lsof: String? = nil) throws -> [Row] {
         let source = FakeProcessSource(lsof: try lsof ?? fixture("lsof-mixed"), commandLines: commandLines)
-        return try Portly(processSource: source).scan()
+        return try Portly(processSource: source, signaller: FakeSignaller()).scan()
     }
 
     @Test func listsOnlyNodeBunAndDenoListeners() throws {
@@ -43,7 +43,7 @@ import PortlyCore
         let source = FakeProcessSource(
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
             commandLines: [10: "node /app/node_modules/.bin/next dev --port 3000"])
-        #expect(try Portly(processSource: source).scan().map(\.command) == ["next dev"])
+        #expect(try Portly(processSource: source, signaller: FakeSignaller()).scan().map(\.command) == ["next dev"])
     }
 
     @Test func ignoresUDPOutboundAndNonLocalBindings() throws {
@@ -99,7 +99,7 @@ import PortlyCore
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
             commandLines: [10: "node /app/srv.js"],
             workingDirectories: [10: "/work/app"])
-        #expect(try Portly(processSource: source).scan().map(\.workingDirectory) == ["/work/app"])
+        #expect(try Portly(processSource: source, signaller: FakeSignaller()).scan().map(\.workingDirectory) == ["/work/app"])
     }
 
     // MARK: Project naming
@@ -109,7 +109,7 @@ import PortlyCore
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\nf2\ntIPv6\nPTCP\nn[::1]:24678\n",
             commandLines: [10: commandLine], workingDirectories: [10: cwd])
         return try Portly(
-            processSource: source, fileLookup: FakeFileLookup(packages: packages),
+            processSource: source, signaller: FakeSignaller(), fileLookup: FakeFileLookup(packages: packages),
             homeDirectory: "/Users/chris").scan()
     }
 
@@ -147,7 +147,7 @@ import PortlyCore
         let source = FakeProcessSource(
             lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
             commandLines: [10: "node /x/server.js"])
-        let rows = try Portly(processSource: source, fileLookup: FakeFileLookup()).scan()
+        let rows = try Portly(processSource: source, signaller: FakeSignaller(), fileLookup: FakeFileLookup()).scan()
         #expect(rows[0].subtitle == "node server.js")
     }
 
