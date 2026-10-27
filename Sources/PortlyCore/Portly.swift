@@ -30,8 +30,10 @@ public struct Portly: Sendable {
 
     /// Kills a Dev Server and its whole process group (ADR 0001): SIGTERM, then SIGKILL
     /// if the server is still alive after the escalation delay.
+    /// Listeners that aren't Dev Servers are signalled by PID only, and system binaries are refused.
     public func kill(_ row: Row) async -> KillOutcome {
-        let group = SignalTarget.group(row.processGroup)
+        if row.isSystemBinary { return .blockedSystemBinary }
+        let group = row.isDevServer ? SignalTarget.group(row.processGroup) : SignalTarget.process(row.pid)
         do {
             try signaller.send(.term, to: group)
         } catch SignalError.noSuchProcess {
@@ -59,39 +61,43 @@ public struct Portly: Sendable {
         return .requiredKill
     }
 
-    /// Scans for Dev Servers and returns one row per server, sorted by lowest port.
-    public func scan() throws -> [Row] {
+    /// Scans for Dev Servers (or, with `showAll`, every Listener) and returns one row
+    /// per process, sorted by lowest port.
+    public func scan(showAll: Bool = false) throws -> [Row] {
         let sockets = LsofParser.listeningSockets(from: try processSource.listeningSockets())
-        let devServers = sockets.compactMap { socket in
-            Runtime(rawValue: socket.executable).map { (socket, $0) }
-        }
-        let byPid = Dictionary(grouping: devServers, by: { $0.0.pid })
+        let kept = sockets.filter { showAll || Runtime(rawValue: $0.executable) != nil }
+        let byPid = Dictionary(grouping: kept, by: \.pid)
         let pids = byPid.keys.sorted()
         let commandLines = try processSource.commandLines(for: pids)
-        let workingDirectories = try processSource.workingDirectories(for: pids)
+        let devPids = pids.filter { Runtime(rawValue: byPid[$0]![0].executable) != nil }
+        let workingDirectories = try processSource.workingDirectories(for: devPids)
 
         // Siblings are other Dev Servers in the same process group (0 means unknown).
         var portsByGroup: [Int32: [Int32: [Int]]] = [:]
-        for (pid, entries) in byPid {
-            portsByGroup[entries[0].0.processGroup, default: [:]][pid] = entries.map(\.0.port)
+        for (pid, entries) in byPid where Runtime(rawValue: entries[0].executable) != nil {
+            portsByGroup[entries[0].processGroup, default: [:]][pid] = entries.map(\.port)
         }
 
         return byPid.map { pid, entries in
-            let group = entries[0].0.processGroup
-            let siblingPorts = group == 0 ? [] : Set(
+            let group = entries[0].processGroup
+            let siblingPorts = group == 0 || Runtime(rawValue: entries[0].executable) == nil ? [] : Set(
                 (portsByGroup[group] ?? [:]).filter { $0.key != pid }.values.flatMap { $0 }
             ).sorted()
-            let runtime = entries[0].1
-            let commandLine = commandLines[pid] ?? runtime.rawValue
+            let executable = entries[0].executable
+            let runtime = Runtime(rawValue: executable)
+            let commandLine = commandLines[pid] ?? executable
             let project = workingDirectories[pid].flatMap(projectInfo(in:))
+            let systemBinary = ["/System/", "/usr/"].contains { commandLine.hasPrefix($0) }
             return Row(
                 pid: pid,
-                processGroup: entries[0].0.processGroup,
-                ports: Set(entries.map(\.0.port)).sorted(),
+                processGroup: entries[0].processGroup,
+                ports: Set(entries.map(\.port)).sorted(),
                 runtime: runtime,
-                command: ShortCommand.make(runtime: runtime, commandLine: commandLine),
+                command: runtime.map { ShortCommand.make(runtime: $0, commandLine: commandLine) } ?? executable,
                 commandLine: commandLine,
-                exposed: entries.contains { $0.0.binding == .allInterfaces },
+                executable: executable,
+                isSystemBinary: systemBinary,
+                exposed: entries.contains { $0.binding == .allInterfaces },
                 workingDirectory: workingDirectories[pid],
                 project: project?.name,
                 projectDirectory: project?.directory,

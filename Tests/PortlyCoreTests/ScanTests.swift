@@ -11,7 +11,38 @@ import PortlyCore
         65898: "/Users/chris/.bun/bin/bun /private/tmp/x/b.js",
         65899: "deno run --allow-net /private/tmp/x/d.js",
         94566: "node /work/app/node_modules/.bin/vite --port 7265",
+        865: "/usr/libexec/rapportd",
+        943: "/System/Library/CoreServices/ControlCenter.app/Contents/MacOS/ControlCenter",
+        1395: "/opt/homebrew/opt/postgresql@16/bin/postgres -D /opt/homebrew/var/postgresql@16",
     ]
+
+    func scanAll() throws -> [Row] {
+        let source = FakeProcessSource(lsof: try fixture("lsof-mixed"), commandLines: commandLines)
+        return try Portly(processSource: source, signaller: FakeSignaller()).scan(showAll: true)
+    }
+
+    @Test func showAllListsEveryListenerWithoutARuntimeForNonDevServers() throws {
+        let rows = try scanAll()
+        #expect(rows.count == 11)
+        let postgres = try #require(rows.first { $0.pid == 1395 })
+        #expect(postgres.runtime == nil)
+        #expect(!postgres.isDevServer)
+        #expect(postgres.ports == [5432])
+        #expect(try #require(rows.first { $0.pid == 65897 }).runtime == .node)
+    }
+
+    @Test func defaultScanStillHidesNonDevServers() throws {
+        #expect(try scan().count == 4)
+        #expect(try scan().allSatisfy(\.isDevServer))
+    }
+
+    @Test func systemBinariesAreMarkedNotKillable() throws {
+        let rows = try scanAll()
+        #expect(try #require(rows.first { $0.pid == 943 }).killBlockedReason != nil)
+        #expect(try #require(rows.first { $0.pid == 865 }).isSystemBinary)
+        #expect(try #require(rows.first { $0.pid == 1395 }).killBlockedReason == nil)
+        #expect(try #require(rows.first { $0.pid == 94566 }).killBlockedReason == nil)
+    }
 
     func scan(lsof: String? = nil) throws -> [Row] {
         let source = FakeProcessSource(lsof: try lsof ?? fixture("lsof-mixed"), commandLines: commandLines)

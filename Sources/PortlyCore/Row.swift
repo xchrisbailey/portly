@@ -9,7 +9,12 @@ public struct Row: Sendable, Equatable, Identifiable {
     public let processGroup: Int32
     /// Listening TCP ports, deduplicated across IPv4/IPv6 and ascending.
     public let ports: [Int]
-    public let runtime: Runtime
+    /// Nil for a Listener that isn't a Dev Server.
+    public let runtime: Runtime?
+    /// Executable name as reported by lsof (`postgres`, `node`).
+    public let executable: String
+    /// True when the executable lives under `/System` or `/usr`; Kill refuses these.
+    public let isSystemBinary: Bool
     /// Short command such as `vite` or `next dev`.
     public let command: String
     public let commandLine: String
@@ -32,8 +37,16 @@ public struct Row: Sendable, Equatable, Identifiable {
         siblingPorts.isEmpty ? nil : "also kills " + siblingPorts.map { ":\($0)" }.joined(separator: ", ")
     }
 
+    public var isDevServer: Bool { runtime != nil }
+
+    /// Why Kill is unavailable for this row, or nil when it is allowed.
+    public var killBlockedReason: String? {
+        isSystemBinary ? "macOS system process, can't kill" : nil
+    }
+
     /// Second part of the row text: `web · vite`, or `node server.js` without a Project.
     public var subtitle: String {
+        guard let runtime else { return command }
         guard let project else { return "\(runtime.rawValue) \(command)" }
         return "\(project) · \(command)"
     }
@@ -44,14 +57,17 @@ public struct Row: Sendable, Equatable, Identifiable {
     }
 
     public init(
-        pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime, command: String, commandLine: String,
-        exposed: Bool = false, workingDirectory: String? = nil, project: String? = nil,
+        pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime?, command: String, commandLine: String,
+        executable: String = "", isSystemBinary: Bool = false, exposed: Bool = false,
+        workingDirectory: String? = nil, project: String? = nil,
         projectDirectory: String? = nil, siblingPorts: [Int] = []
     ) {
         self.pid = pid
         self.processGroup = processGroup
         self.ports = ports
         self.runtime = runtime
+        self.executable = executable
+        self.isSystemBinary = isSystemBinary
         self.command = command
         self.commandLine = commandLine
         self.exposed = exposed

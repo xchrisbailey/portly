@@ -26,4 +26,6 @@ public enum KillOutcome: Sendable, Equatable {
     case requiredKill
     case notPermitted
     case alreadyGone
+    /// Refused without signalling: the row is a macOS system binary.
+    case blockedSystemBinary
 }

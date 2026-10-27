@@ -6,6 +6,9 @@ import PortlyCore
 @Observable
 final class PanelModel {
     private(set) var rows: [Row] = []
+    var showAll = false {
+        didSet { if showAll != oldValue { Task { await refresh() } } }
+    }
     private(set) var errorMessage: String?
     /// PIDs with a Kill in flight (the row shows a spinner).
     private(set) var killing: Set<Int32> = []
@@ -17,8 +20,9 @@ final class PanelModel {
     /// Runs a fresh Scan off the main thread. Called every time the panel opens.
     func refresh() async {
         let portly = portly
+        let showAll = showAll
         do {
-            rows = try await Task.detached { try portly.scan() }.value
+            rows = try await Task.detached { try portly.scan(showAll: showAll) }.value
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

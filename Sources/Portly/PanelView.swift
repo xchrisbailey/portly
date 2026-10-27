@@ -10,7 +10,7 @@ struct PanelView: View {
             if let message = model.errorMessage {
                 Text(message).foregroundStyle(.red).padding(12)
             } else if model.rows.isEmpty {
-                Text("No dev servers running")
+                Text(model.showAll ? "No listeners running" : "No dev servers running")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .padding(20)
@@ -22,6 +22,9 @@ struct PanelView: View {
                     Divider()
                 }
             }
+            Toggle("Show all listeners", isOn: $model.showAll)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
             LaunchAtLoginToggle()
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
@@ -65,6 +68,9 @@ struct RowView: View {
                 if let warning = row.siblingWarning {
                     Text(warning).font(.caption).foregroundStyle(.orange)
                 }
+                if let reason = row.killBlockedReason {
+                    Text(reason).font(.caption).foregroundStyle(.secondary)
+                }
                 if let error {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }
@@ -75,7 +81,8 @@ struct RowView: View {
             } else {
                 Button(action: onKill) { Image(systemName: "xmark") }
                     .buttonStyle(.plain)
-                    .help("Kill")
+                    .disabled(row.killBlockedReason != nil)
+                    .help(row.killBlockedReason ?? "Kill")
             }
         }
         .padding(.horizontal, 12)

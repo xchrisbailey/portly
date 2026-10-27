@@ -41,13 +41,13 @@ final class SleepRecorder: @unchecked Sendable {
 @Suite struct KillTests {
     let row = Row(pid: 100, processGroup: 90, ports: [3000], runtime: .node, command: "vite", commandLine: "node vite")
 
-    func kill(_ signaller: FakeSignaller, sleeper: SleepRecorder = SleepRecorder()) async -> KillOutcome {
+    func kill(_ signaller: FakeSignaller, row: Row? = nil, sleeper: SleepRecorder = SleepRecorder()) async -> KillOutcome {
         let portly = Portly(
             processSource: FakeProcessSource(lsof: ""),
             signaller: signaller,
             escalationDelay: .seconds(2),
             sleep: { sleeper.sleep($0) })
-        return await portly.kill(row)
+        return await portly.kill(row ?? self.row)
     }
 
     @Test func exitingAfterSigtermSendsOnlySigtermToTheGroup() async {
@@ -94,5 +94,21 @@ final class SleepRecorder: @unchecked Sendable {
         s.aliveAnswers = [true]
         s.errors[.kill] = .noSuchProcess
         #expect(await kill(s) == .exitedAfterTerm)
+    }
+
+    @Test func nonDevServerListenerIsSignalledByPidOnlyWithSameEscalation() async {
+        let listener = Row(pid: 200, processGroup: 190, ports: [5432], runtime: nil, command: "postgres", commandLine: "/opt/homebrew/bin/postgres")
+        let s = FakeSignaller()
+        s.aliveAnswers = [true]
+        #expect(await kill(s, row: listener) == .requiredKill)
+        let signals = s.calls.filter { if case .signal = $0 { true } else { false } }
+        #expect(signals == [.signal(.term, .process(200)), .signal(.kill, .process(200))])
+    }
+
+    @Test func systemBinaryIsRefusedWithoutSignalling() async {
+        let system = Row(pid: 300, processGroup: 300, ports: [7000], runtime: nil, command: "ControlCenter", commandLine: "/System/x", isSystemBinary: true)
+        let s = FakeSignaller()
+        #expect(await kill(s, row: system) == .blockedSystemBinary)
+        #expect(s.calls.isEmpty)
     }
 }
