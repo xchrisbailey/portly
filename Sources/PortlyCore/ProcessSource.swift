@@ -9,4 +9,8 @@ public protocol ProcessSource: Sendable {
     /// Full command line (executable and arguments) for each of the given PIDs.
     /// PIDs that no longer exist are omitted.
     func commandLines(for pids: [Int32]) throws -> [Int32: String]
+
+    /// Current working directory for each of the given PIDs.
+    /// PIDs that no longer exist or cannot be inspected are omitted.
+    func workingDirectories(for pids: [Int32]) throws -> [Int32: String]
 }

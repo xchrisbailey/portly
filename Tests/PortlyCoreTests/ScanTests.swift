@@ -81,4 +81,24 @@ import PortlyCore
     @Test func returnsNoRowsWhenNothingIsListening() throws {
         #expect(try scan(lsof: "").isEmpty)
     }
+
+    @Test func marksAllInterfaceBindingsAsExposedAndLoopbackAsNot() throws {
+        let lsof = "p10\ng10\ncbun\nf1\ntIPv4\nPTCP\nn*:8080\np11\ng11\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n"
+        let rows = try scan(lsof: lsof)
+        #expect(rows.map(\.ports) == [[3000], [8080]])
+        #expect(rows.map(\.exposed) == [false, true])
+    }
+
+    @Test func exposedWhenAnyPortIsBoundToAllInterfaces() throws {
+        let lsof = "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\nf2\ntIPv4\nPTCP\nn*:3001\n"
+        #expect(try scan(lsof: lsof).map(\.exposed) == [true])
+    }
+
+    @Test func rowsCarryTheWorkingDirectory() throws {
+        let source = FakeProcessSource(
+            lsof: "p10\ng10\ncnode\nf1\ntIPv4\nPTCP\nn127.0.0.1:3000\n",
+            commandLines: [10: "node /app/srv.js"],
+            workingDirectories: [10: "/work/app"])
+        #expect(try Portly(processSource: source).scan().map(\.workingDirectory) == ["/work/app"])
+    }
 }

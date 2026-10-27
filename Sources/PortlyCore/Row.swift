@@ -13,15 +13,22 @@ public struct Row: Sendable, Equatable, Identifiable {
     /// Short command such as `vite` or `next dev`.
     public let command: String
     public let commandLine: String
+    /// True when any port is bound to all interfaces (Exposed).
+    public let exposed: Bool
+    /// The directory the Dev Server was started from, when it could be read.
+    public let workingDirectory: String?
 
     public var id: Int32 { pid }
 
-    init(pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime, command: String, commandLine: String) {
+    init(pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime, command: String, commandLine: String,
+         exposed: Bool = false, workingDirectory: String? = nil) {
         self.pid = pid
         self.processGroup = processGroup
         self.ports = ports
         self.runtime = runtime
         self.command = command
         self.commandLine = commandLine
+        self.exposed = exposed
+        self.workingDirectory = workingDirectory
     }
 }

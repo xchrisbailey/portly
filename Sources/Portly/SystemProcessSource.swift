@@ -21,6 +21,22 @@ struct SystemProcessSource: ProcessSource {
         return result
     }
 
+    func workingDirectories(for pids: [Int32]) throws -> [Int32: String] {
+        guard !pids.isEmpty else { return [:] }
+        let list = pids.map(String.init).joined(separator: ",")
+        let output = try run("/usr/sbin/lsof", ["-nP", "-a", "-d", "cwd", "-p", list, "-F", "pn"])
+        var result: [Int32: String] = [:]
+        var pid: Int32?
+        for line in output.split(separator: "\n") {
+            switch line.first {
+            case "p": pid = Int32(line.dropFirst())
+            case "n": if let pid { result[pid] = String(line.dropFirst()) }
+            default: break
+            }
+        }
+        return result
+    }
+
     /// Runs a tool and returns stdout. Exit status is ignored: `lsof` and `ps` exit 1 when
     /// nothing matches, which is a valid empty result.
     private func run(_ path: String, _ arguments: [String]) throws -> String {

@@ -41,8 +41,18 @@ struct RowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(row.ports.map { ":\($0)" }.joined(separator: " "))
-                .font(.system(.body, design: .monospaced).weight(.semibold))
+            HStack {
+                Text(row.ports.map { ":\($0)" }.joined(separator: " "))
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+                if row.exposed {
+                    Text("Exposed")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.25), in: Capsule())
+                        .foregroundStyle(.orange)
+                }
+            }
             Text(row.command)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -50,6 +60,29 @@ struct RowView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { openInBrowser() }
         .help("PID \(row.pid)\n\(row.commandLine)")
+        .contextMenu {
+            Button("Copy URL") { copy(url) }
+            Button("Copy PID") { copy(String(row.pid)) }
+            Button("Reveal in Finder") {
+                if let directory = row.workingDirectory {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: directory))
+                }
+            }
+            .disabled(row.workingDirectory == nil)
+        }
+    }
+
+    private var url: String { "http://localhost:\(row.ports[0])" }
+
+    private func openInBrowser() {
+        if let url = URL(string: url) { NSWorkspace.shared.open(url) }
+    }
+
+    private func copy(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
     }
 }

@@ -14,6 +14,7 @@ public struct Portly: Sendable {
         }
         let byPid = Dictionary(grouping: devServers, by: { $0.0.pid })
         let commandLines = try processSource.commandLines(for: byPid.keys.sorted())
+        let workingDirectories = try processSource.workingDirectories(for: byPid.keys.sorted())
 
         return byPid.map { pid, entries in
             let runtime = entries[0].1
@@ -24,7 +25,9 @@ public struct Portly: Sendable {
                 ports: Set(entries.map(\.0.port)).sorted(),
                 runtime: runtime,
                 command: ShortCommand.make(runtime: runtime, commandLine: commandLine),
-                commandLine: commandLine)
+                commandLine: commandLine,
+                exposed: entries.contains { $0.0.binding == .allInterfaces },
+                workingDirectory: workingDirectories[pid])
         }
         .sorted { ($0.ports[0], $0.pid) < ($1.ports[0], $1.pid) }
     }
