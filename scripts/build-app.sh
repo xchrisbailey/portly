@@ -10,11 +10,13 @@ BUILD_DIR="${BUILD_DIR:-build}"
 APP="$BUILD_DIR/Portly.app"
 
 swift build -c release --product Portly
-BIN="$(swift build -c release --product Portly --show-bin-path)/Portly"
+BIN_DIR="$(swift build -c release --product Portly --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
-cp "$BIN" "$APP/Contents/MacOS/Portly"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$BIN_DIR/Portly" "$APP/Contents/MacOS/Portly"
+cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp -R "$BIN_DIR/Portly_Portly.bundle" "$APP/Contents/Resources/"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -26,6 +28,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key><string>Portly</string>
     <key>CFBundleExecutable</key><string>Portly</string>
     <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleVersion</key><string>1</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>

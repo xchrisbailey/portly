@@ -10,7 +10,11 @@ let package = Package(
     ],
     targets: [
         .target(name: "PortlyCore"),
-        .executableTarget(name: "Portly", dependencies: ["PortlyCore"]),
+        .executableTarget(
+            name: "Portly",
+            dependencies: ["PortlyCore"],
+            resources: [.copy("Resources/MenuBarIcon.pdf")]
+        ),
         .testTarget(
             name: "PortlyCoreTests",
             dependencies: ["PortlyCore"],
