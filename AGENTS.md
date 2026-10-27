@@ -11,3 +11,7 @@ Uses the five default triage labels (`needs-triage`, `needs-info`, `ready-for-ag
 ### Domain docs
 
 Single-context: one root `GLOSSARY.md` plus `docs/adr/`. See `docs/agents/domain.md`.
+
+### Version control
+
+jj, colocated with git. See `docs/agents/version-control.md`.
