@@ -62,6 +62,9 @@ struct RowView: View {
                 Text(row.subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let warning = row.siblingWarning {
+                    Text(warning).font(.caption).foregroundStyle(.orange)
+                }
                 if let error {
                     Text(error).font(.caption).foregroundStyle(.red)
                 }

@@ -70,7 +70,17 @@ public struct Portly: Sendable {
         let commandLines = try processSource.commandLines(for: pids)
         let workingDirectories = try processSource.workingDirectories(for: pids)
 
+        // Siblings are other Dev Servers in the same process group (0 means unknown).
+        var portsByGroup: [Int32: [Int32: [Int]]] = [:]
+        for (pid, entries) in byPid {
+            portsByGroup[entries[0].0.processGroup, default: [:]][pid] = entries.map(\.0.port)
+        }
+
         return byPid.map { pid, entries in
+            let group = entries[0].0.processGroup
+            let siblingPorts = group == 0 ? [] : Set(
+                (portsByGroup[group] ?? [:]).filter { $0.key != pid }.values.flatMap { $0 }
+            ).sorted()
             let runtime = entries[0].1
             let commandLine = commandLines[pid] ?? runtime.rawValue
             let project = workingDirectories[pid].flatMap(projectInfo(in:))
@@ -84,7 +94,8 @@ public struct Portly: Sendable {
                 exposed: entries.contains { $0.0.binding == .allInterfaces },
                 workingDirectory: workingDirectories[pid],
                 project: project?.name,
-                projectDirectory: project?.directory)
+                projectDirectory: project?.directory,
+                siblingPorts: siblingPorts)
         }
         .sorted { ($0.ports[0], $0.pid) < ($1.ports[0], $1.pid) }
     }

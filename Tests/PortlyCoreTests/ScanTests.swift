@@ -167,3 +167,36 @@ import PortlyCore
         #expect(rows[0].projectDirectory == "/work/my-app")
     }
 }
+
+@Suite struct SiblingTests {
+    func lsof(_ servers: [(pid: Int, group: Int, cmd: String, port: Int)]) -> String {
+        servers.map { "p\($0.pid)\ng\($0.group)\nc\($0.cmd)\nf1\ntIPv4\nPTCP\nn127.0.0.1:\($0.port)\n" }.joined()
+    }
+
+    func scan(_ servers: [(pid: Int, group: Int, cmd: String, port: Int)]) throws -> [Row] {
+        let source = FakeProcessSource(lsof: lsof(servers))
+        return try Portly(processSource: source, signaller: FakeSignaller()).scan()
+    }
+
+    @Test func reportsPortsOfOtherDevServersInTheSameProcessGroup() throws {
+        let rows = try scan([(10, 5, "node", 3000), (11, 5, "bun", 4000), (12, 5, "node", 5000)])
+        #expect(rows.map(\.siblingPorts) == [[4000, 5000], [3000, 5000], [3000, 4000]])
+        #expect(rows[0].siblingWarning == "also kills :4000, :5000")
+    }
+
+    @Test func rowsWithoutSiblingsHaveNoWarning() throws {
+        let rows = try scan([(10, 5, "node", 3000), (11, 6, "node", 4000)])
+        #expect(rows.allSatisfy { $0.siblingPorts.isEmpty && $0.siblingWarning == nil })
+    }
+
+    @Test func nonDevServerListenersInTheGroupAreNotSiblings() throws {
+        let rows = try scan([(10, 5, "node", 3000), (11, 5, "postgres", 5432)])
+        #expect(rows.map(\.siblingPorts) == [[]])
+    }
+
+    @Test func siblingsDisappearOnRescanAfterKill() throws {
+        let before = try scan([(10, 5, "node", 3000), (11, 5, "node", 4000)])
+        #expect(before.count == 2)
+        #expect(try scan([]).isEmpty)
+    }
+}

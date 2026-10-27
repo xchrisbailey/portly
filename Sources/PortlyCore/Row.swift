@@ -21,8 +21,16 @@ public struct Row: Sendable, Equatable, Identifiable {
     public let project: String?
     /// Directory of the package.json that named the Project, else the working directory.
     public let projectDirectory: String?
+    /// Ports of the other Dev Servers in the same process group, ascending. A Kill of this
+    /// row kills them too (ADR 0001).
+    public let siblingPorts: [Int]
 
     public var id: Int32 { pid }
+
+    /// Warning shown before a Kill, e.g. `also kills :4000, :5000`; nil without Siblings.
+    public var siblingWarning: String? {
+        siblingPorts.isEmpty ? nil : "also kills " + siblingPorts.map { ":\($0)" }.joined(separator: ", ")
+    }
 
     /// Second part of the row text: `web · vite`, or `node server.js` without a Project.
     public var subtitle: String {
@@ -38,7 +46,7 @@ public struct Row: Sendable, Equatable, Identifiable {
     public init(
         pid: Int32, processGroup: Int32, ports: [Int], runtime: Runtime, command: String, commandLine: String,
         exposed: Bool = false, workingDirectory: String? = nil, project: String? = nil,
-        projectDirectory: String? = nil
+        projectDirectory: String? = nil, siblingPorts: [Int] = []
     ) {
         self.pid = pid
         self.processGroup = processGroup
@@ -50,5 +58,6 @@ public struct Row: Sendable, Equatable, Identifiable {
         self.workingDirectory = workingDirectory
         self.project = project
         self.projectDirectory = projectDirectory
+        self.siblingPorts = siblingPorts
     }
 }
