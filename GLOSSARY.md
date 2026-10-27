@@ -25,7 +25,7 @@ A Listener bound to all interfaces rather than loopback only, so it is reachable
 _Avoid_: Public, external
 
 **Kill**:
-Ending a Dev Server together with every process launched by the same command (its wrappers and watchers), gracefully first and forcibly if it does not exit promptly.
+Ending a Dev Server together with every process launched by the same command (its wrappers and watchers), gracefully first and forcibly if it does not exit promptly. A Listener that isn't a Dev Server is killed alone, by PID only, in the same two steps.
 _Avoid_: Stop, terminate, close
 
 **Sibling**:

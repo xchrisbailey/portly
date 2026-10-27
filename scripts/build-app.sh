@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Assembles Portly.app from the SwiftPM release build.
-#   scripts/build-app.sh                 build into ./build/Portly.app
-#   scripts/build-app.sh --install       also copy it into /Applications
+#   scripts/build-app.sh                 build into ./build/Portly.app and install into /Applications
+#   scripts/build-app.sh --build-only    build into ./build/Portly.app, don't install
 #   BUILD_DIR=/some/dir scripts/build-app.sh
 set -euo pipefail
 
@@ -35,11 +35,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Ad-hoc sign so the unsigned personal build launches on Apple silicon.
+# Apple silicon refuses to run unsigned binaries, so sign ad hoc (no identity needed).
 codesign --force --sign - "$APP"
 echo "Built $APP"
 
-if [[ "${1:-}" == "--install" ]]; then
+if [[ "${1:-}" != "--build-only" ]]; then
     rm -rf /Applications/Portly.app
     cp -R "$APP" /Applications/Portly.app
     echo "Installed /Applications/Portly.app"
