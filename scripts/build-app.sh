@@ -31,6 +31,16 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# The version and build number go into an unquoted heredoc below, so keep them to safe characters.
+if [[ -n "$VERSION" && ! "$VERSION" =~ ^[0-9A-Za-z.+-]+$ ]]; then
+    echo "error: --version must use only letters, digits, '.', '+' and '-', got '$VERSION'" >&2
+    exit 2
+fi
+if [[ -n "$BUILD_NUMBER" && ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+    echo "error: --build-number must be a number, got '$BUILD_NUMBER'" >&2
+    exit 2
+fi
+
 # A version means a release: universal binary. No version is the local dev build.
 ARCH_FLAGS=()
 RELEASE=0
@@ -39,17 +49,19 @@ if [[ -n "$VERSION" ]]; then
     ARCH_FLAGS=(--arch arm64 --arch x86_64)
     RELEASE=1
     # Fail before the slow build if there is nothing to sign with.
-    IDENTITY="$(find_sign_identity)"
-    if [[ -z "$IDENTITY" ]]; then
-        echo "error: release build needs a 'Developer ID Application' identity in the keychain" >&2
-        echo "       (see: security find-identity -v -p codesigning), or set PORTLY_SIGN_IDENTITY" >&2
-        exit 1
-    fi
+    require_sign_identity || exit 1
+    IDENTITY="$SIGN_IDENTITY"
 else
     VERSION="0.0.0-dev"
 fi
 if [[ -z "$BUILD_NUMBER" ]]; then
-    BUILD_NUMBER="$(git rev-list --count main 2>/dev/null || echo 1)"
+    if [[ "$RELEASE" == 1 ]]; then
+        # A release must not ship a made-up build number.
+        BUILD_NUMBER="$(git rev-list --count main)" \
+            || { echo "error: could not count commits on main for the build number; pass --build-number" >&2; exit 1; }
+    else
+        BUILD_NUMBER="$(git rev-list --count main 2>/dev/null || echo 1)"
+    fi
 fi
 
 swift build -c release --product Portly ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}

@@ -65,17 +65,22 @@ esac
 exit 0
 FAKE
 chmod +x "$FAKES"/*
-# The fake check command stands in for `scripts/check.sh push`.
+# The fake check command stands in for `scripts/check.sh push`, which rebuilds the ad hoc dev app
+# into build/Portly.app; the fake reproduces that clobber.
 cat > "$WORK/fake-check" <<'FAKE'
 #!/bin/sh
 echo "check $*" >> "$FAKE_LOG"
+mkdir -p build/Portly.app/Contents
+printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n<key>CFBundleShortVersionString</key><string>0.0.0-dev</string>\n</dict>\n</plist>\n' > build/Portly.app/Contents/Info.plist
 [ "${FAKE_CHECK_FAIL:-}" != 1 ]
 FAKE
 chmod +x "$WORK/fake-check"
 
-for t in bash sh env git dirname basename cat grep sed tr rm mkdir cp mktemp head tail cut shasum; do
+for t in sh env git dirname basename cat grep sed tr rm mkdir cp mktemp head tail cut shasum; do
     ln -s "$(command -v "$t")" "$TOOLS/$t"
 done
+# The scripts must work under macOS's bash 3.2, whatever bash is first on the caller's PATH.
+ln -s /bin/bash "$TOOLS/bash"
 
 export FAKE_LOG="$WORK/calls.log"
 export FAKE_BIN_DIR="$WORK/swift-bin"
@@ -112,7 +117,7 @@ run_release() {
     output="$(cd "$WORK/repo" && env -i HOME="$WORK" PATH="$FAKES:$TOOLS" FAKE_LOG="$FAKE_LOG" \
         GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null FAKE_BIN_DIR="$FAKE_BIN_DIR" \
         PORTLY_SIGN_IDENTITY="Developer ID Application: Fake (TEST)" \
-        RELEASE_CHECK_CMD="$WORK/fake-check push" "$@" ./scripts/release.sh 1.2.3 </dev/null 2>&1)" || status=$?
+        RELEASE_CHECK_CMD="$WORK/fake-check push" "$@" /bin/bash ./scripts/release.sh 1.2.3 </dev/null 2>&1)" || status=$?
 }
 
 ok() { echo "  ok: $1"; }
@@ -154,7 +159,8 @@ in_order '^check push' \
     '^xcrun notarytool submit .*Portly-1\.2\.3\.dmg --keychain-profile portly --wait' \
     '^xcrun notarytool log sub-123 --keychain-profile portly' \
     '^xcrun stapler staple .*Portly-1\.2\.3\.dmg' \
-    '^codesign --verify --deep --strict .*Portly\.app' \
+    '^codesign -vvv --deep --strict .*Portly\.app' \
+    '^codesign -vvv .*Portly-1\.2\.3\.dmg' \
     '^spctl .*Portly\.app' \
     '^spctl .*Portly-1\.2\.3\.dmg' \
     '^xcrun stapler validate .*Portly-1\.2\.3\.dmg' \
@@ -162,8 +168,16 @@ in_order '^check push' \
     '^jj git push .*--tag v1\.2\.3' \
     '^gh release create v1\.2\.3 .*Portly-1\.2\.3\.dmg .*--generate-notes'
 
-plist="$WORK/repo/build/Portly.app/Contents/Info.plist"
-if grep -q '<key>CFBundleShortVersionString</key><string>1.2.3</string>' "$plist"; then ok "Info.plist carries the version argument"; else bad "Info.plist version: $(cat "$plist" 2>&1)"; fi
+# plist_get <key> <plist>: plutil where available, else a grep of the one-line entries build-app.sh writes.
+plist_get() {
+    if command -v plutil >/dev/null; then plutil -extract "$1" raw -o - "$2"
+    else grep "<key>$1</key>" "$2" | sed 's/.*<string>\(.*\)<\/string>.*/\1/'; fi
+}
+
+plist="$WORK/repo/build/release/Portly.app/Contents/Info.plist"
+if [ "$(plist_get CFBundleShortVersionString "$plist")" = 1.2.3 ]; then ok "Info.plist carries the version argument"; else bad "Info.plist version in $plist"; fi
+expected_build="$(git -C "$WORK/repo" rev-list --count main)"
+if [ "$(plist_get CFBundleVersion "$plist")" = "$expected_build" ]; then ok "CFBundleVersion is the build number ($expected_build)"; else bad "CFBundleVersion is not $expected_build"; fi
 
 # expect_stopped <name> <FAKE_FAIL glob | FAKE_NOTARY_STATUS=...> <stage>
 # Re-runs the release with a failure injected; it must fail and stop. Stage is the latest step that may
@@ -194,10 +208,19 @@ expect_stopped "notarization Invalid" FAKE_NOTARY_STATUS=Invalid none
 expect_stopped "notarization Rejected" FAKE_NOTARY_STATUS=Rejected none
 expect_stopped "notarization log fetch fails" 'xcrun notarytool log*' none
 expect_stopped "stapling fails" 'xcrun stapler staple*' none
-expect_stopped "codesign verify fails" 'codesign --verify*' none
-expect_stopped "spctl app assessment fails" 'spctl*exec*' none
-expect_stopped "spctl DMG assessment fails" 'spctl*open*' none
-expect_stopped "stapler validate fails" 'xcrun stapler validate*' none
+# Verify failures: stop the first run before the tag so the DMG is reused and only verify runs.
+expect_verify_stopped() { # <name> <FAKE_FAIL glob>
+    new_repo; run_release FAKE_FAIL='jj tag set*'
+    : > "$FAKE_LOG"; run_release FAKE_FAIL="$2"
+    if [ "$status" = 0 ]; then bad "$1: exited 0"
+    elif grep -Eq '^(jj tag|jj git push|gh release)' "$FAKE_LOG"; then bad "$1: tag or release step ran"
+    else ok "$1"; fi
+}
+expect_verify_stopped "app signature verify fails" 'codesign -vvv --deep*'
+expect_verify_stopped "DMG signature verify fails" 'codesign -vvv *dmg'
+expect_verify_stopped "spctl app assessment fails" 'spctl*exec*'
+expect_verify_stopped "spctl DMG assessment fails" 'spctl*open*'
+expect_verify_stopped "stapler validate fails" 'xcrun stapler validate*'
 expect_stopped "tag creation fails" 'jj tag set*' tag
 expect_stopped "tag push fails" 'jj git push*' push
 expect_stopped "release creation fails" 'gh release create*' release
@@ -255,15 +278,28 @@ new_repo; run_release FAKE_FAIL='gh release create*'
 : > "$FAKE_LOG"; run_release
 if [ "$status" = 0 ]; then
     expect_none_ran "re-run after publish failure reuses the stapled DMG" '^swift ' '^create-dmg ' '^codesign --force' 'notarytool submit' 'stapler staple'
-    if [ "$(count '^codesign --verify')" = 1 ] && [ "$(count '^xcrun stapler validate')" = 1 ]; then ok "reused DMG is still re-verified"; else bad "reused DMG not re-verified"; fi
+    if [ "$(count '^codesign -vvv --deep --strict')" = 1 ] && [ "$(count '^xcrun stapler validate')" = 1 ]; then ok "reused DMG is still re-verified"; else bad "reused DMG not re-verified"; fi
+    # The pre-flight check rewrote build/Portly.app as the dev app; the release app must be untouched.
+    if grep -q '^codesign -vvv --deep --strict build/release/Portly\.app' "$FAKE_LOG" \
+        && [ "$(plist_get CFBundleShortVersionString "$plist")" = 1.2.3 ] \
+        && [ "$(plist_get CFBundleShortVersionString "$WORK/repo/build/Portly.app/Contents/Info.plist")" = 0.0.0-dev ]; then
+        ok "re-run verifies the release app even though the checks rebuilt the dev app"
+    else bad "re-run verified the wrong app: $(grep '^codesign -vvv' "$FAKE_LOG")"; fi
 else bad "re-run after publish failure: $output"; fi
 
 new_repo; run_release FAKE_FAIL='gh release create*'
-echo changed >> "$WORK/repo/build/Portly-1.2.3.dmg"
+echo changed >> "$WORK/repo/build/release/Portly-1.2.3.dmg"
 : > "$FAKE_LOG"; run_release
 if [ "$status" = 0 ] && [ "$(count '^create-dmg ')" = 1 ] && [ "$(count 'notarytool submit')" = 1 ]; then
     ok "changed DMG checksum forces a rebuild and re-notarization"
 else bad "changed checksum re-run (status $status): $output"; fi
+
+new_repo; run_release FAKE_FAIL='xcrun stapler staple*'
+git -C "$WORK/repo" commit -q --allow-empty -m two; git -C "$WORK/repo" push -q origin main
+: > "$FAKE_LOG"; run_release
+if [ "$status" = 0 ] && [ "$(count '^create-dmg ')" = 1 ] && [ "$(count 'notarytool submit')" = 1 ]; then
+    ok "a commit change between runs forces a rebuild and re-notarization"
+else bad "commit change re-run (status $status): $output"; fi
 
 new_repo; run_release FAKE_RELEASE_EXISTS=1
 if [ "$status" = 0 ] && grep -q '^gh release upload v1.2.3 .*Portly-1\.2\.3\.dmg --clobber' "$FAKE_LOG" \
@@ -277,6 +313,10 @@ printf '#!/bin/sh\necho "create-dmg $*" >> "$FAKE_LOG"\n' > "$FAKES/create-dmg";
 
 new_repo; run_release FAKE_NO_PROFILE=1
 expect_refused "missing notary profile" "xcrun notarytool store-credentials portly"
+
+new_repo; run_release PORTLY_SIGN_IDENTITY=
+expect_refused "missing signing identity" "PORTLY_SIGN_IDENTITY"
+if grep -q '^check ' "$FAKE_LOG"; then bad "missing signing identity: checks ran first"; fi
 
 new_repo; run_release FAKE_CHECK_FAIL=1
 expect_refused "failing checks" "checks failed"

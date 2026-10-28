@@ -29,12 +29,8 @@ if [[ ! -d "$APP" ]]; then
     exit 1
 fi
 # Fail before the slow DMG build if there is nothing to sign with.
-IDENTITY="$(find_sign_identity)"
-if [[ -z "$IDENTITY" ]]; then
-    echo "error: signing the DMG needs a 'Developer ID Application' identity in the keychain" >&2
-    echo "       (see: security find-identity -v -p codesigning), or set PORTLY_SIGN_IDENTITY" >&2
-    exit 1
-fi
+require_sign_identity || exit 1
+IDENTITY="$SIGN_IDENTITY"
 
 mkdir -p "$OUT_DIR"
 # create-dmg refuses to overwrite an existing DMG.

@@ -18,11 +18,11 @@
 
 ## After a failed run
 
-Re-run the same command; there is no resume flag. The tag is created and pushed after verify, so a failure before then leaves no tag and no release. It leaves `build/` (or `BUILD_DIR`), including the DMG and its `.notarized.sha256` / `.stapled.sha256` records, which `dmg_state` in the script reads to skip finished steps.
+Re-run the same command; there is no resume flag. The tag is created and pushed after verify, so a failure before then leaves no tag and no release. It leaves `build/release/` (or `BUILD_DIR`), including the app, the DMG and its `.notarized.sha256` / `.stapled.sha256` records, which `dmg_state` in the script reads to skip finished steps. The release directory is separate from `build/` because the pre-flight `scripts/check.sh push` rebuilds the dev app into `build/`.
 
 - Failure after the tag is pushed: the re-run keeps the tag (same commit) and uploads the DMG to an existing release.
 - Notarization rejected: the log is printed; fix the cause and re-run, which rebuilds from scratch.
-- Anything that changed the DMG since its record, or no record, rebuilds.
+- Anything that changed the DMG since its record, a different commit than the one recorded, or no record, rebuilds.
 
 ## First-release dry run (#24)
 

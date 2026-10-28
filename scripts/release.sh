@@ -7,12 +7,14 @@
 #
 # Re-running the same command after a failure converges; there is no resume flag. Two checksum
 # files next to the DMG record how far it got: "notarized" (Apple accepted it) and "stapled".
-# A DMG whose current checksum matches is reused and the steps it already passed are skipped
+# Each records the DMG checksum and the commit it was built from. A DMG whose checksum and commit
+# both match the current ones is reused and the steps it already passed are skipped
 # (verify always re-runs). Any mismatch, or no record, rebuilds from scratch. An existing tag on
 # the current commit is kept, and an existing GitHub release gets the DMG by upload (--clobber).
 #
-#   BUILD_DIR           where the app and DMG are written (default: build)
-
+#   BUILD_DIR           where the app and DMG are written (default: build/release; not build/, which
+#                       scripts/check.sh push overwrites with the dev app)
+#   PORTLY_SIGN_IDENTITY  Developer ID Application identity (name or SHA-1) instead of the keychain lookup
 #   RELEASE_CHECK_CMD   command run as the last pre-flight check (default: scripts/check.sh push);
 #                       the release test points it at a fake so it never recurses into real checks
 #   RELEASE_REMOTE      git remote that must be in sync with main (default: origin)
@@ -21,10 +23,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source=scripts/sign-identity.sh
+source scripts/sign-identity.sh
 CHECK_CMD="${RELEASE_CHECK_CMD:-scripts/check.sh push}"
 REMOTE="${RELEASE_REMOTE:-origin}"
 NOTARY_PROFILE="portly"
-BUILD_DIR="${BUILD_DIR:-build}"
+BUILD_DIR="${BUILD_DIR:-build/release}"
 
 fail() {
     echo "release: $*" >&2
@@ -47,12 +51,15 @@ STAPLED_SUM="$DMG.stapled.sha256"
 
 dmg_sum() { shasum -a 256 "$DMG" | cut -d' ' -f1; }
 
+# A progress record is "<DMG checksum> <commit>": it vouches for this DMG built from this commit.
+dmg_record() { echo "$(dmg_sum) $(git rev-parse HEAD)"; }
+
 # Prints none, notarized or stapled: how far the DMG already in the release dir got, trusted
-# only while its checksum still matches the recorded one.
+# only while its checksum and the commit still match the recorded ones.
 dmg_state() {
     [[ -d "$APP" && -f "$DMG" ]] || { echo none; return; }
     local sum
-    sum="$(dmg_sum)"
+    sum="$(dmg_record)"
     if [[ -f "$STAPLED_SUM" && "$(cat "$STAPLED_SUM")" == "$sum" ]]; then echo stapled
     elif [[ -f "$NOTARIZED_SUM" && "$(cat "$NOTARIZED_SUM")" == "$sum" ]]; then echo notarized
     else echo none; fi
@@ -80,6 +87,8 @@ preflight() {
 
     command -v create-dmg >/dev/null || fail "create-dmg not found; install it with: brew install create-dmg"
 
+    require_sign_identity || fail "no signing identity; nothing was built"
+
     xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 \
         || fail "notarytool keychain profile '$NOTARY_PROFILE' not found or unusable; set it up once with: xcrun notarytool store-credentials $NOTARY_PROFILE"
 
@@ -89,7 +98,7 @@ preflight() {
 build_app() {
     echo "==> build and sign app"
     rm -f "$NOTARIZED_SUM" "$STAPLED_SUM"
-    scripts/build-app.sh --version "$VERSION" --build-only
+    BUILD_DIR="$BUILD_DIR" scripts/build-app.sh --version "$VERSION" --build-only
     [[ -d "$APP" ]] || fail "build produced no $APP"
 }
 
@@ -120,18 +129,19 @@ notarize() {
 $log"
     [[ "$(json_field status "$log")" == "Accepted" ]] || fail "notarization log for $id is not Accepted:
 $log"
-    dmg_sum > "$NOTARIZED_SUM"
+    dmg_record > "$NOTARIZED_SUM"
 }
 
 staple() {
     echo "==> staple $DMG"
     xcrun stapler staple "$DMG"
-    dmg_sum > "$STAPLED_SUM"
+    dmg_record > "$STAPLED_SUM"
 }
 
 verify() {
     echo "==> verify"
-    codesign --verify --deep --strict "$APP"
+    codesign -vvv --deep --strict "$APP"
+    codesign -vvv "$DMG"
     spctl --assess --type exec "$APP"
     spctl --assess --type open --context context:primary-signature "$DMG"
     xcrun stapler validate "$DMG"
@@ -162,7 +172,7 @@ publish() {
 # Ordered; stop at the first failure (set -e). Pre-flight runs first, then the DMG's recorded
 # progress decides which build steps are still needed.
 preflight
-STEPS=(preflight)
+STEPS=()
 case "$(dmg_state)" in
     stapled) echo "==> reusing notarized, stapled $DMG" ;;
     notarized) echo "==> reusing notarized $DMG"; STEPS+=(staple) ;;
@@ -170,7 +180,7 @@ case "$(dmg_state)" in
 esac
 STEPS+=(verify tag_and_push publish)
 
-for step in "${STEPS[@]:1}"; do
+for step in "${STEPS[@]}"; do
     "$step"
 done
-echo "==> release $VERSION: steps complete (${STEPS[*]})"
+echo "==> release $VERSION: steps complete (preflight ${STEPS[*]})"
