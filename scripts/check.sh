@@ -1,7 +1,7 @@
 #!/bin/sh
 # Single source of truth for local checks.
 #   commit: format lint + tests (fast; runs before every commit)
-#   push:   commit checks + bundle build + real-adapter smoke test (runs before every push)
+#   push:   commit checks + bundle build + real-adapter smoke test + release script test (runs before every push)
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -20,6 +20,9 @@ if [ "$mode" = push ]; then
 
     echo "==> smoke (real adapters)"
     ./scripts/smoke.sh
+
+    echo "==> release script (fake tools)"
+    ./scripts/release-test.sh
 fi
 
 echo "==> checks passed ($mode)"
