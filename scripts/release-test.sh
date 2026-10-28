@@ -13,7 +13,7 @@ TOOLS="$WORK/tools"      # symlinks to the real utilities the script needs, noth
 mkdir -p "$FAKES" "$TOOLS"
 
 # Every fake logs its call and fails when the call matches the glob in $FAKE_FAIL (failure injection).
-for t in codesign spctl gh jj; do
+for t in codesign spctl jj; do
     cat > "$FAKES/$t" <<'FAKE'
 #!/bin/sh
 call="$(basename "$0") $*"
@@ -22,6 +22,15 @@ case "$call" in $FAKE_FAIL) exit 1 ;; esac
 exit 0
 FAKE
 done
+# gh: `release view` fails (no such release) unless $FAKE_RELEASE_EXISTS=1.
+cat > "$FAKES/gh" <<'FAKE'
+#!/bin/sh
+call="gh $*"
+echo "$call" >> "$FAKE_LOG"
+case "$call" in "gh release view"*) [ "${FAKE_RELEASE_EXISTS:-}" = 1 ]; exit $? ;; esac
+case "$call" in $FAKE_FAIL) exit 1 ;; esac
+exit 0
+FAKE
 # create-dmg: also writes the DMG (its second-to-last argument), as the real one does.
 cat > "$FAKES/create-dmg" <<'FAKE'
 #!/bin/sh
@@ -64,7 +73,7 @@ echo "check $*" >> "$FAKE_LOG"
 FAKE
 chmod +x "$WORK/fake-check"
 
-for t in bash sh env git dirname basename cat grep sed tr rm mkdir cp mktemp head tail cut; do
+for t in bash sh env git dirname basename cat grep sed tr rm mkdir cp mktemp head tail cut shasum; do
     ln -s "$(command -v "$t")" "$TOOLS/$t"
 done
 
@@ -213,7 +222,54 @@ git -C "$WORK/repo" push -q origin main; run_release
 expect_refused "tag on another commit" "already exists on a different commit"
 
 new_repo; git -C "$WORK/repo" tag v1.2.3; run_release
-if [ "$status" = 0 ]; then ok "tag already on current commit is accepted"; else bad "tag on current commit refused: $output"; fi
+if [ "$status" = 0 ] && ! grep -q '^jj tag set' "$FAKE_LOG" && grep -q '^gh release create' "$FAKE_LOG"; then
+    ok "tag already on current commit is accepted and not re-created"
+else bad "tag on current commit (status $status): $output"; fi
+
+# Re-runs: no new repo between the failed run and the retry, so build/ and its checksum files persist.
+count() { grep -Ec -- "$1" "$FAKE_LOG" || true; }
+expect_none_ran() { # <name> <pattern>...
+    local n="$1" p; shift
+    for p in "$@"; do
+        if [ "$(count "$p")" != 0 ]; then bad "$n: '$p' ran again"; return; fi
+    done
+    ok "$n"
+}
+
+new_repo; run_release FAKE_FAIL='xcrun stapler staple*'
+[ "$status" != 0 ] || bad "staple failure setup exited 0"
+: > "$FAKE_LOG"; run_release
+if [ "$status" != 0 ]; then bad "re-run after staple failure: $output"
+else
+    expect_none_ran "re-run after failure past notarization: no rebuild, no re-submit" '^swift ' '^create-dmg ' '^codesign --force' 'notarytool submit'
+    in_order '^xcrun stapler staple' '^xcrun stapler validate' '^jj tag set' '^gh release create'
+fi
+
+new_repo; run_release FAKE_FAIL='xcrun notarytool log*'
+: > "$FAKE_LOG"; run_release
+if [ "$status" = 0 ] && [ "$(count 'notarytool submit')" = 1 ] && [ "$(count '^create-dmg ')" = 1 ]; then
+    ok "re-run after a failed (unrecorded) notarization starts over rather than trusting the DMG"
+else bad "re-run after notarization failure (status $status): $output"; fi
+
+new_repo; run_release FAKE_FAIL='gh release create*'
+: > "$FAKE_LOG"; run_release
+if [ "$status" = 0 ]; then
+    expect_none_ran "re-run after publish failure reuses the stapled DMG" '^swift ' '^create-dmg ' '^codesign --force' 'notarytool submit' 'stapler staple'
+    if [ "$(count '^codesign --verify')" = 1 ] && [ "$(count '^xcrun stapler validate')" = 1 ]; then ok "reused DMG is still re-verified"; else bad "reused DMG not re-verified"; fi
+else bad "re-run after publish failure: $output"; fi
+
+new_repo; run_release FAKE_FAIL='gh release create*'
+echo changed >> "$WORK/repo/build/Portly-1.2.3.dmg"
+: > "$FAKE_LOG"; run_release
+if [ "$status" = 0 ] && [ "$(count '^create-dmg ')" = 1 ] && [ "$(count 'notarytool submit')" = 1 ]; then
+    ok "changed DMG checksum forces a rebuild and re-notarization"
+else bad "changed checksum re-run (status $status): $output"; fi
+
+new_repo; run_release FAKE_RELEASE_EXISTS=1
+if [ "$status" = 0 ] && grep -q '^gh release upload v1.2.3 .*Portly-1\.2\.3\.dmg --clobber' "$FAKE_LOG" \
+    && ! grep -q '^gh release create' "$FAKE_LOG"; then
+    ok "existing release gets the DMG uploaded with --clobber and exits 0"
+else bad "existing release (status $status): $output"; fi
 
 new_repo; rm "$FAKES/create-dmg"; run_release
 expect_refused "missing create-dmg" "brew install create-dmg"

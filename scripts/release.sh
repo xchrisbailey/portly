@@ -5,6 +5,12 @@
 # then tag, push the tag, and publish the GitHub release. The tag comes last on purpose: any
 # failure before it leaves no tag and no release behind.
 #
+# Re-running the same command after a failure converges; there is no resume flag. Two checksum
+# files next to the DMG record how far it got: "notarized" (Apple accepted it) and "stapled".
+# A DMG whose current checksum matches is reused and the steps it already passed are skipped
+# (verify always re-runs). Any mismatch, or no record, rebuilds from scratch. An existing tag on
+# the current commit is kept, and an existing GitHub release gets the DMG by upload (--clobber).
+#
 #   BUILD_DIR           where the app and DMG are written (default: build)
 
 #   RELEASE_CHECK_CMD   command run as the last pre-flight check (default: scripts/check.sh push);
@@ -36,6 +42,21 @@ VERSION="$1"
 TAG="v$VERSION"
 APP="$BUILD_DIR/Portly.app"
 DMG="$BUILD_DIR/Portly-$VERSION.dmg"
+NOTARIZED_SUM="$DMG.notarized.sha256"
+STAPLED_SUM="$DMG.stapled.sha256"
+
+dmg_sum() { shasum -a 256 "$DMG" | cut -d' ' -f1; }
+
+# Prints none, notarized or stapled: how far the DMG already in the release dir got, trusted
+# only while its checksum still matches the recorded one.
+dmg_state() {
+    [[ -d "$APP" && -f "$DMG" ]] || { echo none; return; }
+    local sum
+    sum="$(dmg_sum)"
+    if [[ -f "$STAPLED_SUM" && "$(cat "$STAPLED_SUM")" == "$sum" ]]; then echo stapled
+    elif [[ -f "$NOTARIZED_SUM" && "$(cat "$NOTARIZED_SUM")" == "$sum" ]]; then echo notarized
+    else echo none; fi
+}
 
 preflight() {
     echo "==> pre-flight"
@@ -67,6 +88,7 @@ preflight() {
 
 build_app() {
     echo "==> build and sign app"
+    rm -f "$NOTARIZED_SUM" "$STAPLED_SUM"
     scripts/build-app.sh --version "$VERSION" --build-only
     [[ -d "$APP" ]] || fail "build produced no $APP"
 }
@@ -98,11 +120,13 @@ notarize() {
 $log"
     [[ "$(json_field status "$log")" == "Accepted" ]] || fail "notarization log for $id is not Accepted:
 $log"
+    dmg_sum > "$NOTARIZED_SUM"
 }
 
 staple() {
     echo "==> staple $DMG"
     xcrun stapler staple "$DMG"
+    dmg_sum > "$STAPLED_SUM"
 }
 
 verify() {
@@ -115,20 +139,38 @@ verify() {
 
 # Last on purpose: nothing above leaves a tag or a release behind.
 tag_and_push() {
-    echo "==> tag $TAG"
-    jj tag set "$TAG" -r main
+    # Pre-flight already refused a tag on another commit, so an existing one is on this commit.
+    if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+        echo "==> tag $TAG already on this commit; not re-creating"
+    else
+        echo "==> tag $TAG"
+        jj tag set "$TAG" -r main
+    fi
     jj git push --remote "$REMOTE" --tag "$TAG"
 }
 
 publish() {
-    echo "==> GitHub release $TAG"
-    gh release create "$TAG" "$DMG" --title "Portly $VERSION" --generate-notes --verify-tag
+    if gh release view "$TAG" >/dev/null 2>&1; then
+        echo "==> GitHub release $TAG exists; uploading $DMG"
+        gh release upload "$TAG" "$DMG" --clobber
+    else
+        echo "==> GitHub release $TAG"
+        gh release create "$TAG" "$DMG" --title "Portly $VERSION" --generate-notes --verify-tag
+    fi
 }
 
-# Ordered; stop at the first failure (set -e).
-STEPS=(preflight build_app build_dmg notarize staple verify tag_and_push publish)
+# Ordered; stop at the first failure (set -e). Pre-flight runs first, then the DMG's recorded
+# progress decides which build steps are still needed.
+preflight
+STEPS=(preflight)
+case "$(dmg_state)" in
+    stapled) echo "==> reusing notarized, stapled $DMG" ;;
+    notarized) echo "==> reusing notarized $DMG"; STEPS+=(staple) ;;
+    *) STEPS+=(build_app build_dmg notarize staple) ;;
+esac
+STEPS+=(verify tag_and_push publish)
 
-for step in "${STEPS[@]}"; do
+for step in "${STEPS[@]:1}"; do
     "$step"
 done
 echo "==> release $VERSION: steps complete (${STEPS[*]})"
