@@ -6,7 +6,11 @@
 #                                        release build: universal (arm64 + x86_64), version and build
 #                                        number written to Info.plist; build number defaults to the
 #                                        commit count on main
+#                                        release builds are signed with the Developer ID Application
+#                                        identity (hardened runtime, secure timestamp, no entitlements);
+#                                        dev builds are signed ad hoc and need no certificate
 #   BUILD_DIR=/some/dir scripts/build-app.sh
+#   PORTLY_SIGN_IDENTITY="Developer ID Application: ..." overrides the keychain lookup (name or SHA-1)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -27,8 +31,19 @@ done
 
 # A version means a release: universal binary. No version is the local dev build.
 ARCH_FLAGS=()
+RELEASE=0
+IDENTITY=""
 if [[ -n "$VERSION" ]]; then
     ARCH_FLAGS=(--arch arm64 --arch x86_64)
+    RELEASE=1
+    # Fail before the slow build if there is nothing to sign with.
+    IDENTITY="${PORTLY_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
+        | sed -n 's/^ *[0-9]*) \([0-9A-F]\{40\}\) "Developer ID Application:.*/\1/p' | head -n 1)}"
+    if [[ -z "$IDENTITY" ]]; then
+        echo "error: release build needs a 'Developer ID Application' identity in the keychain" >&2
+        echo "       (see: security find-identity -v -p codesigning), or set PORTLY_SIGN_IDENTITY" >&2
+        exit 1
+    fi
 else
     VERSION="0.0.0-dev"
 fi
@@ -66,8 +81,18 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Apple silicon refuses to run unsigned binaries, so sign ad hoc (no identity needed).
-codesign --force --sign - "$APP"
+if [[ "$RELEASE" == 1 ]]; then
+    # Sign inside out: the app's seal covers the files in Contents/Resources, so the nested SwiftPM
+    # resource bundle must be signed before the app, or signing it afterwards would break the seal.
+    # No --deep (it is deprecated for signing) and no entitlements: Portly needs none.
+    SIGN=(codesign --force --options runtime --timestamp --sign "$IDENTITY")
+    "${SIGN[@]}" "$APP/Contents/Resources/Portly_Portly.bundle"
+    "${SIGN[@]}" "$APP"
+    codesign -vvv --deep --strict "$APP"
+else
+    # Apple silicon refuses to run unsigned binaries, so sign ad hoc (no identity needed).
+    codesign --force --sign - "$APP"
+fi
 echo "Built $APP"
 
 if [[ "$INSTALL" == 1 ]]; then
