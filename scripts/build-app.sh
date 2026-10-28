@@ -14,6 +14,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# shellcheck source=scripts/sign-identity.sh
+source scripts/sign-identity.sh
 BUILD_DIR="${BUILD_DIR:-build}"
 APP="$BUILD_DIR/Portly.app"
 
@@ -37,8 +39,7 @@ if [[ -n "$VERSION" ]]; then
     ARCH_FLAGS=(--arch arm64 --arch x86_64)
     RELEASE=1
     # Fail before the slow build if there is nothing to sign with.
-    IDENTITY="${PORTLY_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
-        | sed -n 's/^ *[0-9]*) \([0-9A-F]\{40\}\) "Developer ID Application:.*/\1/p' | head -n 1)}"
+    IDENTITY="$(find_sign_identity)"
     if [[ -z "$IDENTITY" ]]; then
         echo "error: release build needs a 'Developer ID Application' identity in the keychain" >&2
         echo "       (see: security find-identity -v -p codesigning), or set PORTLY_SIGN_IDENTITY" >&2
