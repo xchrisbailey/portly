@@ -20,6 +20,10 @@ jj, colocated with git. See `docs/agents/version-control.md`.
 
 `scripts/check.sh commit` (lint + tests) and `scripts/check.sh push` (+ app bundle + real-adapter smoke test) run before every commit and push. `scripts/setup-hooks.sh` wires them into git and jj for a fresh clone. To check the real adapters by hand, run `Portly --scan [--all]` or `Portly --kill <pid>` from `swift build --show-bin-path`.
 
+### Releases
+
+`scripts/release.sh X.Y.Z` cuts a signed, notarized release. Setup, failure recovery and the first-release checklist: `docs/agents/release.md`.
+
 ### Subagent reports
 
 Subagents that change code end with the report in `docs/agents/task-return.md`. Reviewers apply `CODING_STANDARDS.md`.
