@@ -18,6 +18,8 @@
 #   RELEASE_CHECK_CMD   command run as the last pre-flight check (default: scripts/check.sh push);
 #                       the release test points it at a fake so it never recurses into real checks
 #   RELEASE_REMOTE      git remote that must be in sync with main (default: origin)
+#   RELEASE_VOLUMES_DIR where mounted volumes appear (default: /Volumes); pre-flight refuses if a
+#                       Portly volume is mounted there, because create-dmg can stall on it
 #
 # This script never prompts for or stores credentials; the notary profile is a one-time manual setup.
 set -euo pipefail
@@ -27,6 +29,7 @@ cd "$(dirname "$0")/.."
 source scripts/sign-identity.sh
 CHECK_CMD="${RELEASE_CHECK_CMD:-scripts/check.sh push}"
 REMOTE="${RELEASE_REMOTE:-origin}"
+VOLUMES_DIR="${RELEASE_VOLUMES_DIR:-/Volumes}"
 NOTARY_PROFILE="portly"
 BUILD_DIR="${BUILD_DIR:-build/release}"
 
@@ -86,6 +89,11 @@ preflight() {
     fi
 
     command -v create-dmg >/dev/null || fail "create-dmg not found; install it with: brew install create-dmg"
+
+    # create-dmg addresses the volume it builds by name, so a mounted Portly volume can stall it.
+    local mounted
+    mounted="$(ls -d "$VOLUMES_DIR"/Portly* 2>/dev/null | head -n 1 || true)"
+    [[ -z "$mounted" ]] || fail "a Portly volume is mounted ($mounted); eject it first"
 
     require_sign_identity || fail "no signing identity; nothing was built"
 

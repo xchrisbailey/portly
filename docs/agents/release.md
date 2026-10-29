@@ -1,6 +1,6 @@
 # Releases
 
-`scripts/release.sh X.Y.Z` ships a signed, notarized, stapled `Portly-X.Y.Z.dmg` as a GitHub release tagged `vX.Y.Z`. It runs on the maintainer's Mac in a GUI session. The step order and its env overrides are in the header of `scripts/release.sh`; its pre-flight failures print the fix.
+`scripts/release.sh X.Y.Z` ships a signed, notarized, stapled `Portly-X.Y.Z.dmg` as a GitHub release tagged `vX.Y.Z`. It runs on the maintainer's Mac in a GUI session. The step order and its env overrides are in the header of `scripts/release.sh`; its pre-flight failures print the fix. `create-dmg` runs under a watchdog (`PORTLY_DMG_TIMEOUT`, default 600s) and pre-flight refuses while a `Portly` volume is mounted, because `create-dmg` can stall on either. A foreground command that outlives the tool timeout keeps running in the background: check its output before calling it hung.
 
 ## Cut a release
 

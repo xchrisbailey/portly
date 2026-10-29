@@ -5,6 +5,7 @@
 #   that has granted Automation permission. The DMG is signed with the Developer ID Application
 #   identity (secure timestamp), found the same way as in build-app.sh.
 #   PORTLY_SIGN_IDENTITY="Developer ID Application: ..." overrides the keychain lookup (name or SHA-1)
+#   PORTLY_DMG_TIMEOUT  seconds to let create-dmg run before it is stopped (default: 600)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -42,6 +43,9 @@ STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 cp -R "$APP" "$STAGE/Portly.app"
 
+# create-dmg drives Finder and can stall (Automation permission prompt, a mounted Portly volume),
+# so run it under a watchdog. The watchdog's output is redirected so a surviving sleep can't hold
+# a pipe open after the script exits.
 create-dmg \
     --volname Portly \
     --background assets/dmg-background.png \
@@ -52,7 +56,20 @@ create-dmg \
     --app-drop-link 490 200 \
     --hide-extension Portly.app \
     --no-internet-enable \
-    "$DMG" "$STAGE"
+    "$DMG" "$STAGE" &
+dmg_pid=$!
+TIMEOUT="${PORTLY_DMG_TIMEOUT:-600}"
+( sleep "$TIMEOUT"; kill "$dmg_pid" 2>/dev/null ) >/dev/null 2>&1 &
+watchdog=$!
+dmg_rc=0
+wait "$dmg_pid" || dmg_rc=$?
+{ kill "$watchdog" && wait "$watchdog"; } 2>/dev/null || true
+if [[ "$dmg_rc" -eq 143 ]]; then
+    echo "error: create-dmg did not finish within ${TIMEOUT}s and was stopped; check Finder Automation permission and eject any mounted Portly volume" >&2
+    exit 1
+elif [[ "$dmg_rc" -ne 0 ]]; then
+    exit "$dmg_rc"
+fi
 
 codesign --force --timestamp --sign "$IDENTITY" "$DMG"
 codesign -vvv "$DMG"

@@ -11,6 +11,7 @@ Read during review. Formatting and layout are enforced by `swift format lint` (c
 ## Tests
 
 - **Tests go through the public Scan and Kill seam with fakes.** A test reaching into a private helper, or asserting on parser internals, is a violation.
+- **A fake reproduces the side effects of the real tool that later steps depend on** (files it writes, shared state it overwrites), not just its exit code. A fake `check.sh` that builds nothing hid a release-directory clobber that the real one caused.
 - **A behaviour that only the real adapters exhibit** (signal semantics, `lsof` field parsing) gets covered by `scripts/smoke.sh` or a fixture captured from real output, not by a fake that assumes the answer.
 
 ## Language

@@ -37,6 +37,7 @@ cat > "$FAKES/create-dmg" <<'FAKE'
 call="create-dmg $*"
 echo "$call" >> "$FAKE_LOG"
 case "$call" in $FAKE_FAIL) exit 1 ;; esac
+[ -z "${FAKE_DMG_SLEEP:-}" ] || sleep "$FAKE_DMG_SLEEP"
 for a in "$@"; do prev="$last"; last="$a"; done
 : > "$prev"
 FAKE
@@ -76,7 +77,7 @@ printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0">\n<dict>\n<
 FAKE
 chmod +x "$WORK/fake-check"
 
-for t in sh env git dirname basename cat grep sed tr rm mkdir cp mktemp head tail cut shasum; do
+for t in sh env git dirname basename cat grep sed tr rm mkdir cp mktemp head tail cut shasum sleep ls; do
     ln -s "$(command -v "$t")" "$TOOLS/$t"
 done
 # The scripts must work under macOS's bash 3.2, whatever bash is first on the caller's PATH.
@@ -188,6 +189,7 @@ expect_stopped() {
     if [ "$status" = 0 ]; then bad "$1: exited 0"; return; fi
     # The failure must have been injected where intended: the last call is the one that failed.
     case "$2" in FAKE_NOTARY_STATUS=*) ;; *)
+        # shellcheck disable=SC2254  # $2 is a glob on purpose, same as FAKE_FAIL in the fakes
         case "$(tail -n 1 "$FAKE_LOG")" in $2) ;; *) bad "$1: stopped elsewhere (last call: $(tail -n 1 "$FAKE_LOG"))"; return ;; esac ;;
     esac
     case "$3" in
@@ -306,6 +308,15 @@ if [ "$status" = 0 ] && grep -q '^gh release upload v1.2.3 .*Portly-1\.2\.3\.dmg
     && ! grep -q '^gh release create' "$FAKE_LOG"; then
     ok "existing release gets the DMG uploaded with --clobber and exits 0"
 else bad "existing release (status $status): $output"; fi
+
+new_repo; mkdir -p "$WORK/volumes/Portly"; run_release RELEASE_VOLUMES_DIR="$WORK/volumes"
+expect_refused "mounted Portly volume" "eject it first"
+rm -rf "$WORK/volumes"
+
+new_repo; run_release FAKE_DMG_SLEEP=30 PORTLY_DMG_TIMEOUT=1
+if [ "$status" != 0 ] && grep -q 'did not finish within 1s' <<<"$output" && ! grep -q '^xcrun notarytool submit' "$FAKE_LOG"; then
+    ok "stalled create-dmg is stopped with a clear message and nothing after it runs"
+else bad "create-dmg timeout (status $status): $output"; fi
 
 new_repo; rm "$FAKES/create-dmg"; run_release
 expect_refused "missing create-dmg" "brew install create-dmg"

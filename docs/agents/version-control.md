@@ -49,6 +49,18 @@ Skills written for git (`code-review`, `pr`, `no-mistakes`, `git-guardrails-clau
 - jj runs no git hooks. Checks run through `scripts/check.sh`; see `AGENTS.md`.
 - Commit or push only when the user asks, same as with git.
 
+## Subagent workspaces
+
+Each implementer works in its own workspace, based on the integration bookmark:
+
+```sh
+jj workspace add ../portly-<name> --name <name> -r <base>
+# work only there; commit with jj commit -m
+jj bookmark create <name> -r @-
+```
+
+Before reporting, rebase onto the base if it moved (`jj rebase -b <name> -d <base>`). The lead merges by moving the base bookmark to `<name>`, then runs `jj workspace forget <name>` and deletes the folder.
+
 ## Pull requests
 
 Push a bookmark, then open the PR with `gh`:

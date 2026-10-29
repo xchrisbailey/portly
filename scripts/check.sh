@@ -1,6 +1,6 @@
 #!/bin/sh
 # Single source of truth for local checks.
-#   commit: format lint + tests (fast; runs before every commit)
+#   commit: format lint + shellcheck + tests (fast; runs before every commit)
 #   push:   commit checks + bundle build + real-adapter smoke test + release script test (runs before every push)
 set -eu
 cd "$(dirname "$0")/.."
@@ -10,6 +10,13 @@ case "$mode" in commit|push) ;; *) echo "usage: scripts/check.sh [commit|push]" 
 
 echo "==> swift format lint"
 swift format lint --strict -r Sources Tests
+
+echo "==> shellcheck"
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck -S warning scripts/*.sh .githooks/pre-commit .githooks/pre-push .claude/hooks/*.sh
+else
+    echo "shellcheck not installed; skipping (brew install shellcheck)"
+fi
 
 echo "==> swift test"
 swift test --quiet
