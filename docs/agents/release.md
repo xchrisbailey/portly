@@ -28,8 +28,8 @@ Re-run the same command; there is no resume flag. The tag is created and pushed 
 
 The first real release closes what only real notarization can check. Tick these on that run:
 
-- [ ] SwiftPM resource-bundle signing order: `scripts/release.sh` completes its `verify` step, and the app launches.
-- [ ] Launch-at-login registers from the signed app dragged from the DMG into `/Applications`.
-- [ ] A browser-downloaded (quarantined) DMG opens with no Gatekeeper warning.
+- [x] SwiftPM resource-bundle signing order: `scripts/release.sh` completes its `verify` step, and the app launches.
+- [x] Launch-at-login registers from the signed app dragged from the DMG into `/Applications`.
+- [x] A browser-downloaded (quarantined) DMG opens with no Gatekeeper warning.
 - [ ] Re-check Apple's current SDK and Xcode minimums for notarization against the installed Xcode.
-- [ ] Note that the x86_64 slice of the universal binary is untested on hardware.
+- [x] Note that the x86_64 slice of the universal binary is untested on hardware.
