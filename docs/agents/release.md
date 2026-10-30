@@ -31,5 +31,5 @@ The first real release closes what only real notarization can check. Tick these 
 - [x] SwiftPM resource-bundle signing order: `scripts/release.sh` completes its `verify` step, and the app launches.
 - [x] Launch-at-login registers from the signed app dragged from the DMG into `/Applications`.
 - [x] A browser-downloaded (quarantined) DMG opens with no Gatekeeper warning.
-- [ ] Re-check Apple's current SDK and Xcode minimums for notarization against the installed Xcode.
+- [x] Re-check Apple's current SDK and Xcode minimums for notarization against the installed Xcode.
 - [x] Note that the x86_64 slice of the universal binary is untested on hardware.
