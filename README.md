@@ -77,3 +77,11 @@ scripts/build-app.sh --build-only   # build Portly.app without installing it
 - `scripts/check.sh commit` and `scripts/check.sh push` run before every commit and push. `scripts/setup-hooks.sh` wires them up in a fresh clone.
 - Domain terms (Listener, Dev Server, Kill, Sibling, …) are defined in [GLOSSARY.md](GLOSSARY.md). Coding conventions are in [CODING_STANDARDS.md](CODING_STANDARDS.md).
 - Maintainers cut releases with `scripts/release.sh`; see [docs/agents/release.md](docs/agents/release.md).
+
+## Website
+
+The GitHub Pages landing page lives in `site/`, with no build step or dependencies. Preview it with `python3 -m http.server 8000 --directory site`.
+
+To publish, set **Settings → Pages → Source** to **GitHub Actions**, then push to `main` or manually run **Deploy landing page**. The site will be at https://xchrisbailey.github.io/portly/. The download button resolves the latest release’s DMG, falling back to the releases page if GitHub’s API is unavailable.
+
+Public downloads require a public repository: GitHub does not expose private release assets to anonymous visitors. If the repository stays private, host the downloads publicly elsewhere and update the download link before publishing.

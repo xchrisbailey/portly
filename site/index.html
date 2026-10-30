@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="See which local dev servers are running and free up their ports in one click. Portly is a small, native macOS menu bar app.">
+    <meta name="theme-color" content="#faf9f6">
+    <title>Portly — Your ports, in plain sight.</title>
+    <link rel="icon" href="icon.png" type="image/png">
+    <link rel="stylesheet" href="style.css">
+    <script src="release.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header wrap">
+      <a class="brand" href="./" aria-label="Portly home"><img src="icon.png" width="36" height="36" alt="">Portly</a>
+      <a class="source-link" href="https://github.com/xchrisbailey/portly">View on GitHub <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero wrap" aria-labelledby="headline">
+        <div class="hero-copy">
+          <p class="eyebrow"><span aria-hidden="true"></span> A little room in your menu bar.</p>
+          <h1 id="headline">Your ports,<br>in plain sight.</h1>
+          <p class="intro">Forgot what’s running on port 3000? Portly shows your local dev servers and lets you kill them in one click. No terminal detective work.</p>
+          <a class="button primary" id="download" href="https://github.com/xchrisbailey/portly/releases/latest"><span aria-hidden="true">↓</span> Download for macOS</a>
+          <p class="download-note">macOS 14+ · Signed &amp; notarized<span id="release-version"></span></p>
+        </div>
+
+        <figure class="preview">
+          <div class="desktop">
+            <div class="menu-bar" aria-hidden="true"><span>Finder</span><div><img src="icon.png" width="22" height="22" alt=""><span>Thu 9:41 AM</span></div></div>
+            <div class="app-panel" role="img" aria-label="Illustrative Portly menu showing three local dev servers">
+              <div class="listener"><div><strong>3000</strong><span> · web · next dev</span></div><span class="kill" aria-hidden="true">×</span></div>
+              <div class="listener"><div><strong>5173</strong><span> · dashboard · vite</span></div><span class="kill" aria-hidden="true">×</span></div>
+              <div class="listener"><div><strong>8080</strong><span> · api · node</span><small>Exposed</small></div><span class="kill" aria-hidden="true">×</span></div>
+              <div class="panel-options"><span><span class="checkbox" aria-hidden="true"></span>Show all listeners</span><span><span class="checkbox checked" aria-hidden="true">✓</span>Launch at login</span></div>
+              <div class="panel-quit">Quit <span>⌘Q</span></div>
+            </div>
+            <div class="desktop-note" aria-hidden="true"><span>localhost:3000</span><br>Found it.</div>
+          </div>
+          <figcaption>Small app. Clear view. <span>Illustrative preview.</span></figcaption>
+        </figure>
+      </section>
+
+      <section class="features wrap" aria-label="Features">
+        <article><span class="feature-number">01 / SEE</span><h2>Know what’s running.</h2><p>Ports, project names, and commands in one place. Built for Node.js, Bun, and Deno, with an option to show all listeners.</p></article>
+        <article><span class="feature-number">02 / KILL</span><h2>Free the port. For real.</h2><p>Kill a dev server along with its wrappers and watchers, so it doesn’t just spring back to life.</p></article>
+        <article><span class="feature-number">03 / GET BACK TO IT</span><h2>Out of your way.</h2><p>Open a server in your browser, copy its URL, or reveal its project in Finder. Native macOS. No Dock icon.</p></article>
+      </section>
+
+    </main>
+
+    <footer class="wrap"><span>Portly · A little less EADDRINUSE.</span><nav aria-label="Footer"><a href="https://github.com/xchrisbailey/portly/releases">Releases</a><a href="https://github.com/xchrisbailey/portly/issues">Report an issue</a><a href="https://github.com/xchrisbailey/portly">Source code</a></nav></footer>
+  </body>
+</html>
